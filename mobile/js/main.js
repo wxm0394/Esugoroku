@@ -1,4 +1,4 @@
-// Game loop, physical dice, input, AI and screen flow.
+// Main 3D Tabletop Game Controller, Step-by-Step Kinematics, DOM HUD, and E2E Surface
 import {
   canvas, ctx, W, H, G, PLAY_BUTTONS, DICE_TRAY, TUBE_RECT, TUBE_CENTER,
   SETTLEMENT_BTNS, GALLERY_CLOSE, SIDE_CARDS, CHARM_SLOTS, START_BTN,
@@ -8,51 +8,343 @@ import {
   BOARD_RECT, saveProfile,
 } from './state.js';
 import {
-  BOARDS, UKIYOE_CARDS, CHARMS, getBoard,
+  BOARDS, UKIYOE_CARDS, CHARMS,
 } from './boards.js';
-import { EsugorokuCore, ESR_CHARM } from './core.js';
-import { drawPlaying, invalidateScene } from './board_renderer.js';
-import {
-  drawUI, drawGallery, drawSettlementScreen, TABS, SELECT_GALLERY,
-} from './ui_screens.js';
+import { EsugorokuCore } from './core.js';
+import { invalidateScene } from './board_renderer.js';
 import { audio } from './audio.js';
 import { loadAllPrints, isPrintLoaded } from './prints.js';
+import { Tabletop3D } from './tabletop_3d.js';
+import { renderNishikieScene } from './nishikie_woodblock.js';
 
 const BOARD_STATUS = [
-  ['東海道を進み、京・八百善の上りを目指す', '紅丸「泊」は一休み。名物格は跳び、上がりは点点一致。'],
-  ['百物語の夜、妖怪札の飛び先を読む', '怪異格に止まると青行灯が消える。四灯全滅で百鬼夜行。'],
-  ['討入備えを三つ揃え、御前の上りへ', '兜・太刀・陣太鼓を集めるまで上りは御前に弾かれる。'],
-  ['善玉と悪玉、心の天平を傾けながら上る', '偶の目は善道、奇の目は悪道。分岐の先で運命が変わる。'],
+  ['東海道を進み、京・八百善の上り（#16）を目指す', '赤丸「泊」は1回休み。名物料理マスは前方へジャンプ！ゴールはぴったり止まる「点点一致」ルール。'],
+  ['百物語の夜、出目1〜6の飛び先を読んで上り（#12）へ', '怪異マスに止まると四隅の青行灯が消える。四灯すべて消えると「百鬼夜行（飛距離2倍）」発動！'],
+  ['道中で討入備え（兜・太刀・陣太鼓）を三つ集めて御前（#13）へ', '三つの備えを揃えるまでゴールは開かない。同じマスに止まると一騎討ちで相手を1マス弾き返す！'],
+  ['善玉と悪玉、分岐マスで偶数なら善道・奇数なら悪道へ', '偶数の目は金色の善道（近道ジャンプ）、奇数の目は紫の悪道（足止め）へ進む王朝双六。'],
 ];
 
+const KANJI_NUMS = ['', '壱', '弐', '参', '肆', '伍', '陸'];
+
 let last = 0;
-let initialized = false;
-let pointerDown = false;
-let galleryOpenedFrom = 'SELECT_BOARD';
+let audioUnlocked = false;
+let tabletop = null;
+let galleryRendered = false;
+
+function unlockAudioOnce() {
+  if (!audioUnlocked) {
+    audioUnlocked = true;
+    audio.unlock();
+  }
+}
 
 function setStatus(text, sub) {
   G.statusText = text;
   if (sub) G.statusSub = sub;
+  syncHudDOM();
 }
 
 function statusForTurn() {
-  const board = currentBoard();
   const human = G.match?.humanSide ?? 0;
-  if (G.match?.winner >= 0) return;
+  if (!G.match || G.match.winner >= 0) return;
   if (G.match.turn === human) {
-    setStatus('竹筒を押さえて振り、指を離して賽を投げよ', BOARD_STATUS[G.boardIdx][1]);
+    setStatus(
+      'あなたの番です ─ 下の「🎲 賽を振る (Space)」または3D賽碗をクリックして骨骰を投げてください',
+      `盤上の ①〜⑥ マーカーは出目1〜6の着地予測です · ${BOARD_STATUS[G.boardIdx][1]}`,
+    );
   } else {
-    setStatus('相手の手番 ─ 賽の行方を見守る', BOARD_STATUS[G.boardIdx][1]);
+    setStatus(
+      '同行者（相手）の手番 ─ 相手が骨骰を振っています…',
+      BOARD_STATUS[G.boardIdx][1],
+    );
   }
 }
 
+function renderDieFaceDOM(value) {
+  const el = document.getElementById('die-face-preview');
+  const numText = document.getElementById('dice-number-text');
+  if (!el || !numText) return;
+  const v = Math.max(1, Math.min(6, Number(value) || 1));
+  el.dataset.value = String(v);
+  numText.textContent = `${KANJI_NUMS[v]} (${v}点)`;
+
+  const pipMap = {
+    1: ['center red'],
+    2: ['tl', 'br'],
+    3: ['tl', 'center', 'br'],
+    4: ['tl', 'tr', 'bl', 'br'],
+    5: ['tl', 'tr', 'center', 'bl', 'br'],
+    6: ['tl', 'tr', 'ml', 'mr', 'bl', 'br'],
+  };
+  el.innerHTML = (pipMap[v] || pipMap[1])
+    .map(cls => `<span class="pip ${cls}"></span>`)
+    .join('');
+}
+
+function describeNodeRule(board, node) {
+  if (!node) return '';
+  if (node.kind === 'start') {
+    return `【振出・起点】${board.title}の出発点です。ここから賽を振って上り（#${board.goal}）を目指します。`;
+  }
+  if (node.kind === 'goal') {
+    if (board.id === 'kesshu') {
+      return `【大上り・終着】道中で「兜・太刀・陣太鼓」の三つの討入備えを集めて到達すると勝利です！`;
+    }
+    return `【大上り・終着】ここに到達すれば勝利です！（東海道・源氏巻はぴったり止まる点点一致ルール）`;
+  }
+  if (board.id === 'yokai' && node.jumpTable) {
+    const jumps = node.jumpTable.map((d, idx) => `${idx + 1}点→${d >= 0 ? '+' + d : d}格`).join(' / ');
+    return `【飛び双六マス】${node.rule || ''} （出目ごとの移動: ${jumps}）`;
+  }
+  if (node.kind === 'jump') {
+    const d = node.jumpTable ? node.jumpTable[0] : 2;
+    return `【名物跳びマス】止まると名物の力でさらに ${d >= 0 ? '+' + d : d} 格ジャンプします！（${node.rule || ''}）`;
+  }
+  if (node.kind === 'stay') {
+    return `【宿場泊マス】止まると本来は1回休みですが、「宿場守り」護符があれば自動で休みを無効化します！`;
+  }
+  if (node.kind === 'branch') {
+    return `【善悪分岐マス】次の出目が偶数（2・4・6）なら金色の善道、奇数（1・3・5）なら紫の悪道へ分岐します。`;
+  }
+  if (node.tokens) {
+    return `【討入備えマス】止まると御前上りに必要な武具印「${node.rule || '備え'}」を獲得します！`;
+  }
+  return `【道中マス】${node.rule || '次の宿場へ着実に駒を進めます。'}`;
+}
+
+function syncHudDOM() {
+  const board = currentBoard();
+  if (!board) return;
+
+  // Topbar active board tab
+  document.querySelectorAll('.nav-link[data-board]').forEach(btn => {
+    btn.classList.toggle('active', Number(btn.dataset.board) === G.boardIdx);
+  });
+
+  // Coach banner
+  const badgeEl = document.getElementById('coach-badge');
+  const mainEl = document.getElementById('coach-main');
+  const subEl = document.getElementById('coach-sub');
+  if (badgeEl && mainEl && subEl) {
+    const isHumanTurn = G.match && G.match.turn === G.match.humanSide;
+    if (G.phase === 'ANIM') {
+      badgeEl.textContent = '🎲 投骰中';
+      badgeEl.style.background = '#c4922f';
+    } else if (G.phase === 'MOVE') {
+      badgeEl.textContent = '🏃 駒移動中';
+      badgeEl.style.background = '#2b6e52';
+    } else if (isHumanTurn) {
+      badgeEl.textContent = 'あなたの手番';
+      badgeEl.style.background = '#bf3426';
+    } else {
+      badgeEl.textContent = '相手の手番';
+      badgeEl.style.background = '#1d5478';
+    }
+    mainEl.textContent = G.statusText || BOARD_STATUS[G.boardIdx][0];
+    subEl.textContent = G.statusSub || BOARD_STATUS[G.boardIdx][1];
+  }
+
+  // Bottom dock players & volume status
+  const volTitle = document.getElementById('dock-volume-title');
+  const ruleTag = document.getElementById('dock-rule-tag');
+  if (volTitle) volTitle.textContent = `${board.volume}・${board.title}`;
+  if (ruleTag) ruleTag.textContent = board.ruleBrief || board.ruleSummary;
+
+  if (G.match) {
+    const human = G.match.humanSide;
+    const ai = 1 - human;
+    const hNode = board.nodes[G.match.pos[human]] || board.nodes[0];
+    const aNode = board.nodes[G.match.pos[ai]] || board.nodes[0];
+
+    const row0 = document.getElementById('player-row-0');
+    const row1 = document.getElementById('player-row-1');
+    const tag0 = document.getElementById('turn-tag-0');
+    const tag1 = document.getElementById('turn-tag-1');
+    const pos0 = document.getElementById('player-pos-0');
+    const pos1 = document.getElementById('player-pos-1');
+
+    const humanTurn = G.match.turn === human;
+    if (row0) row0.classList.toggle('active', humanTurn);
+    if (row1) row1.classList.toggle('active', !humanTurn);
+    if (tag0) tag0.classList.toggle('hidden', !humanTurn);
+    if (tag1) tag1.classList.toggle('hidden', humanTurn);
+    if (pos0) {
+      const skipTxt = G.match.skip[human] > 0 ? ` (休み${G.match.skip[human]})` : '';
+      pos0.textContent = `現在地: #${hNode.id} ${hNode.title}${skipTxt}`;
+    }
+    if (pos1) {
+      const skipTxt = G.match.skip[ai] > 0 ? ` (休み${G.match.skip[ai]})` : '';
+      pos1.textContent = `現在地: #${aNode.id} ${aNode.title}${skipTxt}`;
+    }
+
+    const meterEl = document.getElementById('board-special-meter');
+    if (meterEl) {
+      const remain = Math.max(0, board.goal - G.match.pos[human]);
+      if (board.id === 'tokaido') {
+        meterEl.textContent = `🍱 宿場名物: ${G.tokaidoGourmet.length} / 3 獲得 · 上りまで残り ${remain} 格`;
+      } else if (board.id === 'yokai') {
+        meterEl.textContent = `🏮 青行灯: 残り ${G.yokaiLanterns} / 4 灯 ${G.yokaiFrenzy ? '【百鬼夜行・飛距離2倍！】' : ''}`;
+      } else if (board.id === 'kesshu') {
+        meterEl.textContent = `⚔️ 討入備え: ${G.kesshuPieces} / 3 獲得（3つ揃うと御前開門）`;
+      } else {
+        const mood = G.genjiBalance >= 0 ? '善道寄り（金色）' : '悪道寄り（紫色）';
+        meterEl.textContent = `☯️ 心の天平: ${mood} · 上りまで残り ${remain} 格`;
+      }
+    }
+
+    // Inspector card: show hovered node or current human node
+    const inspectIdx = G.hoverNode >= 0 && board.nodes[G.hoverNode]
+      ? G.hoverNode
+      : G.match.pos[human];
+    const inspNode = board.nodes[inspectIdx] || board.nodes[0];
+    const inspId = document.getElementById('insp-id');
+    const inspTitle = document.getElementById('insp-title');
+    const inspKind = document.getElementById('insp-kind');
+    const inspDesc = document.getElementById('insp-desc');
+
+    if (inspId) inspId.textContent = `#${inspNode.id}`;
+    if (inspTitle) inspTitle.textContent = inspNode.title;
+    if (inspKind) {
+      const kindNames = {
+        start: '振出・起点',
+        goal: '大上り・終着',
+        jump: '名物跳び',
+        stay: '宿場泊',
+        branch: '善悪分岐',
+        good: '善玉雅道',
+        evil: '悪玉修羅道',
+        normal: inspNode.tokens ? '討入備え' : '道中宿場',
+      };
+      inspKind.textContent = kindNames[inspNode.kind] || '道中';
+    }
+    if (inspDesc) inspDesc.textContent = describeNodeRule(board, inspNode);
+
+    // Pocket talisman active state
+    const usedMask = G.match.charmsUsed?.[human] || 0;
+    const charmBits = { stay: 1, guard: 2, dash: 4 };
+    document.querySelectorAll('.charm-item').forEach(el => {
+      const cid = el.dataset.charm;
+      const equipped = G.charms.includes(cid);
+      const used = (usedMask & (charmBits[cid] || 0)) !== 0;
+      el.classList.toggle('active', equipped && !used);
+    });
+
+    // Roll button state
+    const rollBtn = document.getElementById('btn-roll');
+    if (rollBtn) {
+      const canRoll = G.screen === 'PLAYING' && G.phase === 'ROLL' && G.match.turn === human && G.match.winner < 0;
+      rollBtn.disabled = !canRoll;
+      const mainSpan = rollBtn.querySelector('.roll-cta-main');
+      const subSpan = rollBtn.querySelector('.roll-cta-sub');
+      if (mainSpan && subSpan) {
+        if (G.phase === 'ANIM') {
+          mainSpan.textContent = '🎲 骨骰が回転中…';
+          subSpan.textContent = '賽碗の出目を見極めています';
+        } else if (G.phase === 'MOVE') {
+          mainSpan.textContent = '🏃 駒が進んでいます…';
+          subSpan.textContent = '一歩ずつ宿場を跳び進みます';
+        } else if (!humanTurn) {
+          mainSpan.textContent = '⏳ 相手の手番中';
+          subSpan.textContent = '同行者が賽を振っています';
+        } else {
+          mainSpan.textContent = '🎲 賽を振る (Space)';
+          subSpan.textContent = '碗に骨骰を投げて進む';
+        }
+      }
+    }
+  }
+
+  renderDieFaceDOM(G.diceValue || 1);
+
+  // Event toast banner
+  const toastEl = document.getElementById('event-toast');
+  const toastTitle = document.getElementById('event-toast-title');
+  const toastSub = document.getElementById('event-toast-sub');
+  if (toastEl && toastTitle && toastSub) {
+    if (G.toast && G.toast.life > 0) {
+      toastTitle.textContent = G.toast.text;
+      toastSub.textContent = G.toast.sub || '';
+      toastEl.classList.remove('hidden');
+    } else {
+      toastEl.classList.add('hidden');
+    }
+  }
+
+  // Settlement modal
+  const settleModal = document.getElementById('settlement-modal');
+  if (settleModal) {
+    const wonState = G.screen === 'PLAYING' && G.match && (G.match.winner >= 0 || G.phase === 'SETTLEMENT');
+    settleModal.classList.toggle('hidden', !wonState);
+    if (wonState) {
+      const humanWon = G.match.winner === G.match.humanSide;
+      const seal = document.getElementById('settlement-seal');
+      const title = document.getElementById('settlement-title');
+      const sub = document.getElementById('settlement-sub');
+      if (seal) {
+        seal.textContent = humanWon ? '祝' : '終';
+        seal.style.background = humanWon ? '#bf3426' : '#2a3b4c';
+      }
+      if (title) title.textContent = humanWon ? '見事、大上り達成！' : '惜敗 ─ 同行者が先に上りました';
+      if (sub) {
+        sub.textContent = humanWon
+          ? `「${board.title}」を踏破し、見事に一番乗りを果たしました！`
+          : `次は懐中護符と飛びマスを活かして雪辱を果たしましょう。`;
+      }
+    }
+  }
+
+  // Lobby modal sync with G.screen
+  const lobbyModal = document.getElementById('lobby-modal');
+  if (lobbyModal) {
+    lobbyModal.classList.toggle('hidden', G.screen !== 'SELECT_BOARD' && G.screen !== 'SELECT_SIDE');
+  }
+
+  // Gallery modal sync with G.showGallery
+  const galleryModal = document.getElementById('gallery-modal');
+  if (galleryModal) {
+    galleryModal.classList.toggle('hidden', !G.showGallery);
+    if (G.showGallery) renderGalleryDOM();
+  }
+}
+
+function renderGalleryDOM() {
+  const countLabel = document.getElementById('gallery-count-label');
+  if (countLabel) {
+    countLabel.textContent = `蒐集状況: ${G.collection.size} / ${UKIYOE_CARDS.length} 枚 開帳済み`;
+  }
+  if (galleryRendered) return;
+  const grid = document.getElementById('gallery-grid');
+  if (!grid) return;
+  galleryRendered = true;
+  grid.innerHTML = '';
+
+  UKIYOE_CARDS.forEach(card => {
+    const item = document.createElement('div');
+    item.className = 'gallery-card-item';
+    const c = document.createElement('canvas');
+    c.width = 320;
+    c.height = 220;
+    const g = c.getContext('2d');
+    const boardId = BOARDS[card.board]?.id || 'tokaido';
+    renderNishikieScene(g, boardId, { art: card.art, id: card.number, kind: card.rarity === '特大判' ? 'goal' : 'normal' }, 320, 220);
+
+    const meta = document.createElement('div');
+    meta.className = 'gallery-card-meta';
+    meta.innerHTML = `<strong>#${String(card.number).padStart(2, '0')} ${card.title}</strong><span>${card.artist}</span>`;
+    item.appendChild(c);
+    item.appendChild(meta);
+    grid.appendChild(item);
+  });
+}
+
 function openSide(index) {
-  G.boardIdx = index;
+  G.boardIdx = Math.max(0, Math.min(3, Number(index) | 0));
   G.hoverBoard = -1;
   G.screen = 'SELECT_SIDE';
   G.hoverSide = -1;
   G.hoverCharm = -1;
   audio.paper();
+  syncHudDOM();
 }
 
 function beginMatch() {
@@ -60,20 +352,14 @@ function beginMatch() {
   G.showGallery = false;
   resetMatchState();
   const board = currentBoard();
-  setStatus(
-    G.match.turn === G.humanSide ? '竹筒を押さえて振り、指を離して賽を投げよ' : '相手の手番 ─ 賽の行方を見守る',
-    BOARD_STATUS[G.boardIdx][1],
-  );
-  const fresh = unlockBoardCards(G.boardIdx);
-  if (fresh.length) {
-    G.newCards = fresh;
-    showToast(`${fresh.length} 枚の錦絵が開帳された`, board.volume + ' の新しい札');
-  }
+  unlockBoardCards(G.boardIdx);
   invalidateScene();
   audio.paper();
-  G.aiTimer = G.match.turn === G.humanSide ? 0 : 1.1;
+  G.aiTimer = G.match.turn === G.humanSide ? 0 : 1.0;
   G.phase = 'ROLL';
   G.match.winner = -1;
+  statusForTurn();
+  syncHudDOM();
 }
 
 function backToSelect() {
@@ -82,6 +368,7 @@ function backToSelect() {
   G.hoverBoard = -1;
   G.phase = 'ROLL';
   audio.paper();
+  syncHudDOM();
 }
 
 function syncBoardStats() {
@@ -101,81 +388,80 @@ function syncBoardStats() {
 function handleEvents(result, roll) {
   const board = currentBoard();
   const human = G.match.humanSide;
-  const player = result.state.turn === (1 - human) ? human : (result.state.winner >= 0 ? result.state.winner : 1 - result.state.turn);
   const mover = result.events.find(e => e.player !== undefined)?.player ?? human;
   const finalPos = result.state.pos[mover];
   const node = board.nodes[finalPos];
-  const opponent = 1 - mover;
   let usedJump = false;
   let usedBounce = false;
+
   for (const ev of result.events) {
     if (ev.type === 'jump') {
       usedJump = true;
       G.stats.jumps++;
       audio.jump();
-      showToast(`跳び ─ ${board.nodes[ev.from]?.title || ''} から ${board.nodes[ev.to]?.title || ''} へ`, `出目 ${roll} の短冊`);
+      showToast(`⚡ 名物跳び！ ${board.nodes[ev.from]?.title || ''} → ${board.nodes[ev.to]?.title || ''}`, `出目 ${roll} の跳躍効果`);
     } else if (ev.type === 'bounce') {
       usedBounce = true;
-      audio.bounce();
-      showToast('上りを超過 ─ 道中へ弾き返された', '点点一致でなければ上がれない');
+      audio.bounce(1.2);
+      showToast('↩️ 上りを超過 ─ 点点一致のため折り返し', 'ぴったり止まると大上り達成');
     } else if (ev.type === 'token') {
       audio.token();
-      G.tokaidoGourmet.length = G.tokaidoGourmet.length;
       showStamp('討入備え', ev.label || '義士印');
-      showToast(`討入備え「${ev.label || '印'}」を得た`, '三つ揃えば御前へ上がれる');
+      showToast(`⚔️ 討入備え「${ev.label || '印'}」を獲得！`, '三つ揃えば御前の上りが開門');
     } else if (ev.type === 'stay') {
       audio.stay();
-      showToast(`泊 ─ ${ev.turns} 手休み`, board.nodes[ev.to]?.title || '');
+      showToast(`🏮 宿場泊 ─ ${ev.turns} 手休み`, board.nodes[ev.to]?.title || '');
     } else if (ev.type === 'duel') {
       G.stats.duels++;
       audio.duel();
-      showToast('同格の武者と一騎討ち', '相手を一ます弾き返した');
+      showToast('⚔️ 同格の武者と一騎討ち！', '相手を一格後ろへ弾き返した');
     } else if (ev.type === 'charm') {
       audio.charm();
-      showToast(ev.charm === 'stay' ? '宿場守りが泊を無効化' : ev.charm === 'guard' ? '妖怪封じが戻り跳びを封じた' : '早駕籠が一歩を加えた', '懐中守り札');
+      showToast(
+        ev.charm === 'stay'
+          ? '🛡️ 懐中護符「宿場守り」が泊休みを無効化！'
+          : ev.charm === 'guard'
+            ? '🛡️ 懐中護符「妖怪封じ」が戻り跳びを封じた！'
+            : '⚡ 懐中護符「早駕籠」が初手を＋1歩加速！',
+        '懐中守り札が自動発動',
+      );
     } else if (ev.type === 'goal_locked') {
       audio.stay();
       showStamp('御前返し', `備え ${ev.required} 枚が必要`);
-      showToast('上りはまだ開かない', '討入備えを三つ揃えよ');
-    } else if (ev.type === 'win') {
-      // Handled after state synchronisation.
+      showToast('🔒 御前の上りはまだ開かない！', '先に兜・太刀・陣太鼓を三つ揃えよう');
     } else if (ev.type === 'branch_good') {
-      showToast('善玉・源氏雅道へ', '偶の目が心の天平を善へ傾ける');
+      showToast('✨ 偶数の目 ─ 金色の「善道」へ進む！', '近道ルートへ入りました');
     } else if (ev.type === 'branch_evil') {
-      showToast('悪玉・修羅道へ', '奇の目が心の天平を悪へ傾ける');
+      showToast('🌑 奇数の目 ─ 紫の「悪道」へ進む', '足止めルートへ入りました');
     } else if (ev.type === 'skip') {
-      showToast('一休み', 'この手番は休み');
+      showToast('🏮 宿場泊のためこの手番は一休み', '次の手番から再開します');
     }
   }
 
-  // A local gold-cloud / sakura burst only at the final square.
   if (node) {
     const c = nodeCenter(node);
     spawnLandingEffect(c.x, c.y, board.id === 'genji' ? 'sakura' : 'gold', node.title);
+    if (tabletop) tabletop.spawnTileRipple(finalPos, usedJump ? '#ff5945' : '#f5cb5c');
   }
-  if (mover === human) {
-    G.tokaidoGourmet.length = G.tokaidoGourmet.length;
-  }
+
   if (board.id === 'tokaido' && mover === human && node && node.kind === 'jump') {
     const foodIndex = [2, 7, 12].indexOf(node.id);
     if (foodIndex >= 0 && !G.tokaidoGourmet.includes(foodIndex)) {
       G.tokaidoGourmet.push(foodIndex);
-      showToast(`宿場名物「${node.title}」を味わった`, '次の跳びが伸びる');
+      showToast(`🍱 宿場名物「${node.title}」を堪能！`, `名物蒐集 ${G.tokaidoGourmet.length} / 3`);
     }
   }
 
   if (board.id === 'yokai') {
-    if (mover === G.match.humanSide || mover === 1 - G.match.humanSide) {
-      if (finalPos > 0 && finalPos < board.goal && G.yokaiLanterns > 0) {
-        G.yokaiLanterns -= 1;
-        audio.lantern();
-        if (G.yokaiLanterns === 0) {
-          G.yokaiFrenzy = true;
-          showStamp('百鬼夜行', '怪異飛距離 二倍');
-          showToast('青行灯がすべて消えた', '次の怪異跳びは二倍になる');
-        } else {
-          showToast(`青行灯がひとつ消えた（残り ${G.yokaiLanterns}）`, '四灯全滅で百鬼夜行');
-        }
+    if (finalPos > 0 && finalPos < board.goal && G.yokaiLanterns > 0) {
+      G.yokaiLanterns -= 1;
+      audio.lantern();
+      if (G.yokaiLanterns === 0) {
+        G.yokaiFrenzy = true;
+        showStamp('百鬼夜行', '怪異飛距離 二倍');
+        showToast('🏮 四隅の青行灯がすべて消えた！', '百鬼夜行発動 ─ 次の跳び距離が2倍！');
+      } else {
+        showToast(`🏮 青行灯がひとつ消えた（残り ${G.yokaiLanterns} 灯）`, '四灯全滅で百鬼夜行が到来');
       }
     }
   }
@@ -184,30 +470,20 @@ function handleEvents(result, roll) {
     G.yokaiFrenzy = false;
     G.yokaiLanterns = 4;
     G.yokaiFrenzyUsed = true;
-    showToast('百鬼夜行が過ぎた', '青行灯が四つとも灯り直した');
   }
   if (usedBounce) G.yokaiFrenzyUsed = true;
+
   syncBoardStats();
   if (result.won || result.state.winner >= 0) {
     G.phase = 'SETTLEMENT';
     if (result.state.winner === G.match.humanSide) audio.win();
     else audio.lose();
     unlockBoardCards(G.boardIdx);
-    showStamp(result.state.winner === G.match.humanSide ? '大上り' : '終局', result.state.winner === G.match.humanSide ? '見事、京へ到達' : '道半ば');
+    syncHudDOM();
     return;
   }
   statusForTurn();
-}
-
-function applyResult(result, roll) {
-  G.match = result.state;
-  G.phase = result.won ? 'SETTLEMENT' : 'ROLL';
-  G.diceValue = roll;
-  G.dice[0] = roll;
-  handleEvents(result, roll);
-  if (G.phase !== 'SETTLEMENT') {
-    G.aiTimer = G.match.turn === G.match.humanSide ? 0 : 0.9;
-  }
+  syncHudDOM();
 }
 
 function popcount3(mask) {
@@ -264,18 +540,26 @@ function beginMove(result, roll, oldState) {
   const hist = result.state.history?.[result.state.history.length - 1];
   const skipped = result.events.some(e => e.type === 'skip');
   const steps = skipped ? 0 : (hist?.steps || roll);
-  let indexes = simulateWalk(board, oldState.pos[mover], steps, roll);
+  let indexes = board.style === 'tobi'
+    ? [oldState.pos[mover], result.state.pos[mover]]
+    : simulateWalk(board, oldState.pos[mover], steps, roll);
+
   const jump = result.events.find(e => e.type === 'jump');
   if (jump && indexes[indexes.length - 1] !== jump.to) indexes.push(jump.to);
   const final = result.state.pos[mover];
   if (indexes[indexes.length - 1] !== final) indexes.push(final);
-  if (!indexes.length) indexes = [oldState.pos[mover], final];
+  if (indexes.length < 2) indexes = [oldState.pos[mover], final];
+
   const path = pathToPoints(board, indexes, mover);
-  const dur = Math.max(560, Math.min(1750, (indexes.length - 1) * 130 + (jump ? 320 : 0)));
-  G.pieceAnim = { side: mover, path, t0: performance.now(), duration: dur };
+  // Crisp 240ms per step so each hop feels distinct and rhythmic
+  const dur = Math.max(480, Math.min(2200, (indexes.length - 1) * 240 + (jump ? 320 : 0)));
+  G.pieceAnim = { side: mover, path, indexes, t0: performance.now(), duration: dur, lastSeg: -1 };
   G.pendingResult = { result, roll };
   G.phase = 'MOVE';
-  setStatus('賽の目に従って駒が進む', currentBoard().ruleSummary);
+  setStatus(
+    `出目「${KANJI_NUMS[roll]} (${roll}点)」に従って駒が ${indexes.length - 1} 歩進みます`,
+    `${board.nodes[oldState.pos[mover]]?.title || ''} → ${board.nodes[final]?.title || ''}`,
+  );
 }
 
 function finishMove() {
@@ -285,10 +569,10 @@ function finishMove() {
   G.pieceAnim = null;
   G.match = result.state;
   G.phase = result.won || result.state.winner >= 0 ? 'SETTLEMENT' : 'ROLL';
-  handleEvents(result, roll);
   G.diceValue = roll;
+  handleEvents(result, roll);
   if (G.phase !== 'SETTLEMENT') {
-    G.aiTimer = G.match.turn === G.match.humanSide ? 0 : 0.9;
+    G.aiTimer = G.match.turn === G.match.humanSide ? 0 : 0.85;
   }
 }
 
@@ -305,9 +589,11 @@ function targetRotation(value, yaw) {
 }
 
 function startRoll(forcedValue = null) {
+  unlockAudioOnce();
   if (G.screen !== 'PLAYING' || G.phase !== 'ROLL') return false;
   if (!G.match || G.match.winner >= 0) return false;
   if (G.match.turn !== G.match.humanSide && forcedValue === null) return false;
+
   const value = forcedValue ?? (1 + Math.floor(Math.random() * 6));
   const target = targetRotation(value, Math.random() * 1.4 - 0.7);
   const die = G.physDice[0];
@@ -318,24 +604,28 @@ function startRoll(forcedValue = null) {
   G.tube.shake = 1;
   G.tube.tipped = true;
   G.rollPending = true;
-  setStatus('賽が転がる ─ 目を読む', '盤面は静止したまま、骰だけが踊る');
+  setStatus('🎲 骨骰が賽碗の中で跳ねています…', '止まった上面の目が今回の歩数になります');
+
   die.settled = false;
   die.settling = false;
   die.spinTime = 0;
   die.x = TUBE_CENTER.x + 14;
   die.y = TUBE_CENTER.y - 10;
-  die.z = 42 + Math.random() * 18;
-  die.vx = 24 + Math.random() * 40;
-  die.vy = -7 + Math.random() * 18;
-  die.vz = 26 + Math.random() * 22;
-  die.wx = 9 + Math.random() * 8;
-  die.wy = 7 + Math.random() * 9;
-  die.wz = 5 + Math.random() * 7;
+  die.z = 44 + Math.random() * 18;
+  die.vx = 28 + Math.random() * 38;
+  die.vy = -8 + Math.random() * 18;
+  die.vz = 28 + Math.random() * 20;
+  die.wx = 11 + Math.random() * 8;
+  die.wy = 9 + Math.random() * 9;
+  die.wz = 7 + Math.random() * 7;
   die.target = target;
   die.value = value;
   die.active = true;
-  audio.throwDie();
+
+  audio.shake();
+  setTimeout(() => audio.throwDie(), 90);
   showStamp('投 骰', `${currentBoard().ui.diceDevice}より一擲`);
+  syncHudDOM();
   return true;
 }
 
@@ -343,12 +633,13 @@ function onActiveSettled(value) {
   G.diceValue = value;
   G.dice[0] = value;
   G.rollResolved = true;
-  G.resolveTimer = 0.24;
+  G.resolveTimer = 0.22;
   G.tube.shake = 0;
   G.tube.tipped = false;
   G.rollPending = false;
-  setStatus(`出目は ${value}`, '賽が静まり、駒が動き出す');
-  audio.bounce();
+  setStatus(`🎲 出目は「${KANJI_NUMS[value]} (${value}点)」！`, '賽が静まり、木駒が一歩ずつ進み出します');
+  audio.bounce(1.0);
+  syncHudDOM();
 }
 
 function resolvePendingRoll() {
@@ -383,7 +674,6 @@ function aiChooseRoll() {
 }
 
 function updateDice(dt) {
-  const board = currentBoard();
   for (const die of G.physDice) {
     if (die.settled) continue;
     die.spinTime += dt;
@@ -391,12 +681,12 @@ function updateDice(dt) {
       die.x += die.vx * dt;
       die.y += die.vy * dt;
       die.z += die.vz * dt;
-      die.vz -= 760 * dt;
+      die.vz -= 780 * dt;
       if (die.z < 0) {
         die.z = 0;
-        if (Math.abs(die.vz) > 8) {
-          die.vz = -die.vz * 0.48;
-          audio.bounce();
+        if (Math.abs(die.vz) > 10) {
+          die.vz = -die.vz * 0.50;
+          audio.bounce(Math.min(1, Math.abs(die.vz) / 160));
         } else {
           die.vz = 0;
         }
@@ -409,7 +699,7 @@ function updateDice(dt) {
       die.rx += die.wx * dt;
       die.ry += die.wy * dt;
       die.rz += die.wz * dt;
-      // Tray walls (V2 single oversized die).
+
       const left = 1050;
       const right = 1190;
       const top = 574;
@@ -418,7 +708,7 @@ function updateDice(dt) {
       if (die.x > right) { die.x = right; die.vx = -Math.abs(die.vx) * 0.7; }
       if (die.y < top) { die.y = top; die.vy = Math.abs(die.vy) * 0.7; }
       if (die.y > bottom) { die.y = bottom; die.vy = -Math.abs(die.vy) * 0.7; }
-      if ((die.spinTime > 0.82 && die.z <= 0.1 && Math.abs(die.vx) + Math.abs(die.vy) < 32) || die.spinTime > 1.7) {
+      if ((die.spinTime > 0.75 && die.z <= 0.1 && Math.abs(die.vx) + Math.abs(die.vy) < 34) || die.spinTime > 1.45) {
         die.settling = true;
       }
     } else {
@@ -426,13 +716,13 @@ function updateDice(dt) {
       const tx = nearest(die.rx, die.target.rx);
       const ty = nearest(die.ry, die.target.ry);
       const tz = nearest(die.rz, die.target.rz);
-      const k = Math.min(1, dt * 10);
+      const k = Math.min(1, dt * 12);
       die.rx += (tx - die.rx) * k;
       die.ry += (ty - die.ry) * k;
       die.rz += (tz - die.rz) * k;
       die.x += (1110 - die.x) * k;
       die.y += (620 - die.y) * k;
-      if (Math.abs(tx - die.rx) < 0.01 && Math.abs(ty - die.ry) < 0.01 && Math.abs(tz - die.rz) < 0.01) {
+      if (Math.abs(tx - die.rx) < 0.02 && Math.abs(ty - die.ry) < 0.02 && Math.abs(tz - die.rz) < 0.02) {
         die.rx = tx; die.ry = ty; die.rz = tz;
         die.settled = true;
         die.settling = false;
@@ -440,12 +730,10 @@ function updateDice(dt) {
       }
     }
   }
-  if (G.tube.shake > 0) G.tube.shake = Math.max(0, G.tube.shake - dt * 1.4);
-  if (G.rollResolved) {
-    if (G.resolveTimer > 0) {
-      G.resolveTimer -= dt;
-      if (G.resolveTimer <= 0) resolvePendingRoll();
-    }
+  if (G.tube.shake > 0) G.tube.shake = Math.max(0, G.tube.shake - dt * 1.6);
+  if (G.rollResolved && G.resolveTimer > 0) {
+    G.resolveTimer -= dt;
+    if (G.resolveTimer <= 0) resolvePendingRoll();
   }
 }
 
@@ -453,7 +741,10 @@ function update(dt) {
   G.pulseTick += dt;
   if (G.toast) {
     G.toast.life -= dt;
-    if (G.toast.life <= 0) G.toast = null;
+    if (G.toast.life <= 0) {
+      G.toast = null;
+      syncHudDOM();
+    }
   }
   if (G.stamp) {
     G.stamp.life -= dt;
@@ -461,30 +752,26 @@ function update(dt) {
   }
   for (const fx of G.effects) fx.t += dt;
   G.effects = G.effects.filter(fx => fx.t < fx.life);
+
   if (G.screen !== 'PLAYING') return;
   updateDice(dt);
+
   if (G.phase === 'MOVE' && G.pieceAnim) {
     const anim = G.pieceAnim;
     const p = Math.max(0, Math.min(1, (performance.now() - anim.t0) / anim.duration));
-    const seg = Math.min(anim.path.length - 2, Math.floor(p * (anim.path.length - 1)));
+    const numSteps = Math.max(1, (anim.indexes?.length || anim.path.length) - 1);
+    const seg = Math.min(numSteps - 1, Math.floor(p * numSteps));
     if (seg !== anim.lastSeg) {
       anim.lastSeg = seg;
-      audio.step();
+      audio.step(seg);
+      const steppedNodeId = anim.indexes?.[seg + 1];
+      if (steppedNodeId !== undefined && tabletop) {
+        tabletop.spawnTileRipple(steppedNodeId, '#f5cb5c');
+      }
     }
-    // V2 camera: zoom 1 -> 1.22 and track the moving pawn.
-    const next = anim.path[Math.min(anim.path.length - 1, seg + 1)] || anim.path[anim.path.length - 1];
-    const cur = anim.path[seg >= 0 ? seg : 0] || next;
-    G.camera.focus = { x: (cur.x + next.x) / 2, y: (cur.y + next.y) / 2 - 6 };
-    G.camera.zoom = 1 + 0.22 * p;
     if (p >= 1) finishMove();
   }
-  // Restore the overview camera after movement ends.
-  if (G.phase !== 'MOVE' || !G.pieceAnim) {
-    const bx = BOARD_RECT.x + BOARD_RECT.w / 2;
-    const by = BOARD_RECT.y + BOARD_RECT.h / 2;
-    G.camera.focus = { x: bx + (G.camera.focus.x - bx) * 0.12, y: by + (G.camera.focus.y - by) * 0.12 };
-    G.camera.zoom = Math.min(1.0, G.camera.zoom + (1 - G.camera.zoom) * 0.18);
-  }
+
   if (G.phase === 'ROLL' && G.match?.winner < 0 && G.match?.turn !== G.match?.humanSide) {
     if (G.aiTimer <= 0.001) {
       const value = aiChooseRoll();
@@ -496,236 +783,187 @@ function update(dt) {
   }
 }
 
-function handleGalleryClick(p) {
-  if (isInside(GALLERY_CLOSE, p.x, p.y)) {
+function setupDOMControls() {
+  // Volume switch buttons in Top Bar
+  document.querySelectorAll('.nav-link[data-board]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      unlockAudioOnce();
+      const idx = Number(btn.dataset.board) | 0;
+      window.__ESR__.switchToBoard(idx);
+      audio.select();
+    });
+  });
+
+  // Camera preset buttons in Top Bar
+  document.querySelectorAll('.cam-btn[data-cam]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      unlockAudioOnce();
+      const preset = btn.dataset.cam;
+      document.querySelectorAll('.cam-btn').forEach(b => b.classList.toggle('active', b === btn));
+      if (tabletop) tabletop.setCameraPreset(preset);
+      audio.select();
+    });
+  });
+
+  // Beginner Guide Modal
+  const tutorialModal = document.getElementById('tutorial-modal');
+  const openTutorial = () => {
+    unlockAudioOnce();
+    if (tutorialModal) tutorialModal.classList.remove('hidden');
+    audio.paper();
+  };
+  const closeTutorial = () => {
+    unlockAudioOnce();
+    if (tutorialModal) tutorialModal.classList.add('hidden');
+    audio.select();
+  };
+  document.getElementById('btn-tutorial')?.addEventListener('click', openTutorial);
+  document.getElementById('btn-coach-help')?.addEventListener('click', openTutorial);
+  document.getElementById('btn-tutorial-close')?.addEventListener('click', closeTutorial);
+  document.getElementById('btn-tutorial-start')?.addEventListener('click', closeTutorial);
+  document.getElementById('btn-tutorial-sound')?.addEventListener('click', () => {
+    unlockAudioOnce();
+    audio.setEnabled(true);
+    audio.win();
+    showToast('🔊 江戸和楽器と檜木駒の音響を再生中', '賽の投擲・木駒の歩進・三味線の跳躍音');
+    syncHudDOM();
+  });
+
+  // Gallery Modal
+  document.getElementById('btn-gallery')?.addEventListener('click', () => {
+    unlockAudioOnce();
+    G.showGallery = true;
+    audio.paper();
+    syncHudDOM();
+  });
+  document.getElementById('btn-gallery-close')?.addEventListener('click', () => {
     G.showGallery = false;
     audio.paper();
-    return true;
-  }
-  if (isInside(TABS.cards, p.x, p.y)) { G.galleryTab = 'cards'; G.galleryHover = -1; return true; }
-  if (isInside(TABS.charms, p.x, p.y)) { G.galleryTab = 'charms'; G.galleryHover = -1; return true; }
-  return true;
-}
+    syncHudDOM();
+  });
 
-function handleClick(p) {
-  if (G.showGallery) {
-    handleGalleryClick(p);
-    return;
-  }
-  if (G.screen === 'SELECT_BOARD') {
-    if (isInside(SELECT_GALLERY, p.x, p.y)) {
-      galleryOpenedFrom = 'SELECT_BOARD';
-      G.showGallery = true;
-      G.galleryTab = 'cards';
-      audio.paper();
-      return;
-    }
-    for (let i = 0; i < 4; i++) {
-      if (isInside(getSelectBoardRect(i), p.x, p.y)) {
-        openSide(i);
-        return;
-      }
-    }
-  } else if (G.screen === 'SELECT_SIDE') {
-    for (const card of SIDE_CARDS) {
-      if (isInside(card, p.x, p.y)) {
-        G.humanSide = card.side;
-        audio.select();
-        return;
-      }
-    }
-    for (const slot of CHARM_SLOTS) {
-      if (isInside(slot, p.x, p.y)) {
-        const idx = G.charms.indexOf(slot.id);
-        if (idx >= 0) G.charms.splice(idx, 1);
-        else if (G.charms.length < 3) G.charms.push(slot.id);
-        else {
-          G.charms.shift();
-          G.charms.push(slot.id);
-        }
-        saveProfile();
-        audio.select();
-        return;
-      }
-    }
-    if (isInside(START_BTN, p.x, p.y)) { beginMatch(); return; }
-    if (isInside(SIDE_GALLERY_BTN, p.x, p.y)) {
-      galleryOpenedFrom = 'SELECT_SIDE';
-      G.showGallery = true;
-      G.galleryTab = 'cards';
-      audio.paper();
-      return;
-    }
-    if (isInside(SIDE_BACK_BTN, p.x, p.y)) { backToSelect(); return; }
-  } else if (G.screen === 'PLAYING') {
-    if (G.match?.winner >= 0 || G.phase === 'SETTLEMENT') {
-      if (isInside(SETTLEMENT_BTNS.again, p.x, p.y)) {
-        beginMatch();
-        return;
-      }
-      if (isInside(SETTLEMENT_BTNS.menu, p.x, p.y)) {
-        backToSelect();
-        return;
-      }
-      return;
-    }
-    if (isInside(PLAY_BUTTONS.gallery, p.x, p.y)) {
-      G.showGallery = true;
-      G.galleryTab = 'cards';
-      galleryOpenedFrom = 'PLAYING';
-      audio.paper();
-      return;
-    }
-    if (isInside(PLAY_BUTTONS.charms, p.x, p.y)) {
-      G.showGallery = true;
-      G.galleryTab = 'charms';
-      galleryOpenedFrom = 'PLAYING';
-      audio.paper();
-      return;
-    }
-    if (isInside(PLAY_BUTTONS.menu, p.x, p.y)) {
-      backToSelect();
-      return;
-    }
-    if (G.match?.turn === G.match?.humanSide && G.phase === 'ROLL' && isInside(TUBE_RECT, p.x, p.y)) {
-      startRoll();
-      return;
-    }
-  }
-}
+  // Audio Toggle
+  const audioBtn = document.getElementById('btn-audio');
+  audioBtn?.addEventListener('click', () => {
+    unlockAudioOnce();
+    const next = !audio.isEnabled();
+    audio.setEnabled(next);
+    audioBtn.textContent = next ? '🔊 効果音: 開' : '🔇 効果音: 閉';
+    if (next) audio.toggle();
+  });
 
-function hoverAt(p) {
-  G.hoverBoard = -1;
-  G.hoverSide = -1;
-  G.hoverCharm = -1;
-  G.hoverPlayBtn = -1;
-  G.hoverNode = -1;
-  G.galleryHover = -1;
-  if (G.showGallery) {
-    if (G.galleryTab === 'cards') {
-      for (let i = 0; i < UKIYOE_CARDS.length; i++) {
-        if (isInside(getGalleryCardRect(i), p.x, p.y)) { G.galleryHover = i; break; }
-      }
-    } else {
-      for (let i = 0; i < CHARMS.length; i++) {
-        const cw = 280; const ch = 330;
-        const x = 18 + 60 + i * (cw + 35);
-        const y = 14 + 150;
-        if (isInside({ x, y, w: cw, h: ch }, p.x, p.y)) { G.galleryHover = i; break; }
-      }
-    }
-    return;
-  }
-  if (G.screen === 'SELECT_BOARD') {
-    for (let i = 0; i < 4; i++) if (isInside(getSelectBoardRect(i), p.x, p.y)) G.hoverBoard = i;
-  } else if (G.screen === 'SELECT_SIDE') {
-    for (const card of SIDE_CARDS) if (isInside(card, p.x, p.y)) G.hoverSide = card.side;
-    for (const slot of CHARM_SLOTS) if (isInside(slot, p.x, p.y)) G.hoverCharm = slot.id;
-    if (isInside(START_BTN, p.x, p.y)) G.hoverPlayBtn = 9;
-  } else if (G.screen === 'PLAYING') {
-    if (isInside(PLAY_BUTTONS.gallery, p.x, p.y)) G.hoverPlayBtn = 0;
-    else if (isInside(PLAY_BUTTONS.charms, p.x, p.y)) G.hoverPlayBtn = 1;
-    else if (isInside(PLAY_BUTTONS.menu, p.x, p.y)) G.hoverPlayBtn = 2;
-    if (isInside(TUBE_RECT, p.x, p.y)) {
-      G.tube.hover = true;
-      document.body.style.cursor = 'grab';
-    } else {
-      G.tube.hover = false;
-      document.body.style.cursor = 'default';
-    }
-    const board = currentBoard();
-    const bx = p.x - 190;
-    const by = p.y - 68;
-    for (let i = 0; i < board.nodes.length; i++) {
-      const n = board.nodes[i];
-      if (bx >= n.x && bx <= n.x + n.w && by >= n.y && by <= n.y + n.h) {
-        G.hoverNode = i;
-        break;
-      }
-    }
-  }
-}
+  // Lobby Modal
+  document.getElementById('btn-lobby')?.addEventListener('click', () => {
+    unlockAudioOnce();
+    G.screen = 'SELECT_BOARD';
+    audio.paper();
+    syncHudDOM();
+  });
+  document.getElementById('btn-lobby-close')?.addEventListener('click', () => {
+    G.screen = 'PLAYING';
+    audio.select();
+    syncHudDOM();
+  });
+  document.querySelectorAll('[data-play-board], [data-select-board]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      unlockAudioOnce();
+      const idx = Number(el.dataset.playBoard ?? el.dataset.selectBoard) | 0;
+      window.__ESR__.switchToBoard(idx);
+      audio.select();
+    });
+  });
 
-function setupInput() {
-  canvas.addEventListener('pointermove', e => {
-    const p = toStageXY(e.clientX, e.clientY);
-    hoverAt(p);
+  // Bottom Dock Collapse / Expand (Zen Mode)
+  const dockWrap = document.getElementById('bottom-dock-wrap');
+  const dockToggle = document.getElementById('btn-dock-toggle');
+  const toggleDock = () => {
+    if (!dockWrap || !dockToggle) return;
+    const collapsed = dockWrap.classList.toggle('collapsed');
+    dockToggle.textContent = collapsed ? '▴ 操作パネルを展開する' : '▾ 操作パネルを隠す (Zen Mode)';
+    audio.select();
+  };
+  dockToggle?.addEventListener('click', toggleDock);
+
+  // Roll CTA Button
+  document.getElementById('btn-roll')?.addEventListener('click', () => {
+    unlockAudioOnce();
+    startRoll();
   });
-  canvas.addEventListener('pointerdown', e => {
-    if (!initialized) {
-      initialized = true;
-      audio.toggle();
-    }
-    canvas.setPointerCapture?.(e.pointerId);
-    const p = toStageXY(e.clientX, e.clientY);
-    if (G.screen === 'PLAYING' && !G.showGallery && G.phase === 'ROLL' &&
-        G.match?.turn === G.match?.humanSide && isInside(TUBE_RECT, p.x, p.y)) {
-      G.tube.hold = true;
-      G.tube.holdT = performance.now();
-      G.tube.shake = 0.55;
-      audio.shake();
-      setStatus('竹筒を握る ─ 離すと賽が飛ぶ', currentBoard().ruleBrief || currentBoard().ruleSummary);
-      e.preventDefault();
-      return;
-    }
-    pointerDown = true;
+
+  // Settlement Buttons
+  document.getElementById('btn-play-again')?.addEventListener('click', () => {
+    unlockAudioOnce();
+    beginMatch();
   });
-  canvas.addEventListener('pointerup', e => {
-    const p = toStageXY(e.clientX, e.clientY);
-    if (G.tube.hold) {
-      G.tube.hold = false;
-      G.tube.shake = 0;
-      if (G.match?.turn === G.match?.humanSide && G.phase === 'ROLL') startRoll();
-      return;
-    }
-    if (pointerDown) {
-      pointerDown = false;
-      handleClick(p);
-    }
+  document.getElementById('btn-settlement-lobby')?.addEventListener('click', () => {
+    unlockAudioOnce();
+    backToSelect();
   });
-  canvas.addEventListener('pointercancel', () => {
-    G.tube.hold = false;
-    G.tube.shake = 0;
-    pointerDown = false;
-  });
-  canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  // Keyboard shortcuts
   window.addEventListener('keydown', e => {
-    if (e.code === 'Escape') {
-      if (G.showGallery) {
-        G.showGallery = false;
-        return;
-      }
-      if (G.screen === 'SELECT_SIDE') {
-        backToSelect();
-        return;
-      }
-    }
+    unlockAudioOnce();
     if (e.code === 'Space') {
       e.preventDefault();
-      if (G.screen === 'PLAYING' && G.phase === 'ROLL' && G.match?.turn === G.match?.humanSide) startRoll();
+      if (G.screen === 'PLAYING' && G.phase === 'ROLL' && G.match?.turn === G.match?.humanSide) {
+        startRoll();
+      }
+    } else if (e.code === 'KeyH') {
+      toggleDock();
+    } else if (e.code === 'Escape') {
+      if (G.showGallery) {
+        G.showGallery = false;
+        syncHudDOM();
+      } else if (tutorialModal && !tutorialModal.classList.contains('hidden')) {
+        tutorialModal.classList.add('hidden');
+      } else if (G.screen !== 'PLAYING') {
+        G.screen = 'PLAYING';
+        syncHudDOM();
+      }
     }
   });
 }
 
-function frame(now) {
+// Software-WebGL safe frame scheduler (per Three.js skill directive)
+let frameId = 0;
+function afterDraw(cb) {
+  if (!tabletop || !tabletop.renderer) {
+    frameId = window.setTimeout(cb, 80);
+    return;
+  }
+  const gl = tabletop.renderer.getContext();
+  if (!gl || typeof gl.fenceSync !== 'function') {
+    frameId = window.setTimeout(cb, 80);
+    return;
+  }
+  const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  gl.flush();
+  const poll = () => {
+    const state = sync && gl.getSyncParameter(sync, gl.SYNC_STATUS);
+    if (state === gl.UNSIGNALED) {
+      frameId = window.setTimeout(poll, 5);
+    } else {
+      if (sync) gl.deleteSync(sync);
+      frameId = window.setTimeout(cb, 80);
+    }
+  };
+  frameId = window.setTimeout(poll, 5);
+}
+
+function tick() {
+  const now = performance.now();
   const dt = Math.min(0.05, (now - last) / 1000 || 0.016);
   last = now;
   update(dt);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  // The canvas is sized to the viewport; draw the 1280x800 stage centered.
-  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-  const scale = Math.min(canvas.width / W, canvas.height / H);
-  ctx.setTransform(scale, 0, 0, scale, (canvas.width - W * scale) / 2, (canvas.height - H * scale) / 2);
-  if (G.screen === 'PLAYING') {
-    drawPlaying(ctx, now / 1000);
-    if (G.match?.winner >= 0) drawSettlementScreen(ctx, now / 1000);
-  } else {
-    drawUI(ctx, now / 1000);
+  if (tabletop) {
+    tabletop.update(dt, now / 1000);
   }
-  if (G.showGallery) drawGallery(ctx, now / 1000);
-  requestAnimationFrame(frame);
+  if (tabletop && tabletop.isSoftwareGl) {
+    afterDraw(tick);
+  } else {
+    frameId = requestAnimationFrame(tick);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -776,9 +1014,9 @@ function snapshot() {
     statusText: G.statusText,
     statusSub: G.statusSub,
     diceValue: G.diceValue,
-    dice: [G.physDice[0]].map(function(d){
-      return {x:d.x,y:d.y,z:d.z,vx:d.vx,vy:d.vy,settled:d.settled,active:d.active,value:d.value};
-    }),
+    dice: [G.physDice[0]].map(d => ({
+      x: d.x, y: d.y, z: d.z, vx: d.vx, vy: d.vy, settled: d.settled, active: d.active, value: d.value,
+    })),
     dieValue: G.diceValue,
     effects: G.effects.length,
     deviceRect: { ...TUBE_RECT },
@@ -804,7 +1042,9 @@ window.__ESR__ = {
     G.match.turn = G.humanSide;
     G.phase = 'ROLL';
     G.aiTimer = 0;
+    if (tabletop) tabletop.buildBoard(i);
     statusForTurn();
+    syncHudDOM();
     return snapshot();
   },
   openSide(index) { openSide(Number(index) | 0); return snapshot(); },
@@ -817,8 +1057,10 @@ window.__ESR__ = {
     G.match = result.state;
     G.phase = result.won ? 'SETTLEMENT' : 'ROLL';
     G.diceValue = Number(value);
+    if (G.physDice[0]) G.physDice[0].value = Number(value);
     handleEvents(result, Number(value));
     if (G.phase !== 'SETTLEMENT') G.aiTimer = 0;
+    syncHudDOM();
     return snapshot();
   },
   settleMove() {
@@ -829,6 +1071,7 @@ window.__ESR__ = {
     G.match.turn = side;
     G.aiTimer = 0;
     statusForTurn();
+    syncHudDOM();
     return snapshot();
   },
   selectRect(index) {
@@ -836,12 +1079,41 @@ window.__ESR__ = {
     return { ...r };
   },
   galleryCloseRect() { return { ...GALLERY_CLOSE }; },
-  showGallery(on, tab = 'cards') { G.showGallery = !!on; G.galleryTab = tab; },
+  showGallery(on, tab = 'cards') {
+    G.showGallery = !!on;
+    G.galleryTab = tab;
+    syncHudDOM();
+  },
   invalidation() { invalidateScene(); },
   printsLoaded(boardId, art) { return isPrintLoaded(boardId, art); },
 };
 
-setupInput();
-requestAnimationFrame(frame);
+// Initialize 3D Tabletop & Start Immediately in Active Play Mode on Volume 1 (Tokaido)
+const mountEl = document.getElementById('webgl-mount');
+if (mountEl) {
+  tabletop = new Tabletop3D(
+    mountEl,
+    nodeId => {
+      if (G.hoverNode !== nodeId) {
+        G.hoverNode = nodeId;
+        syncHudDOM();
+      }
+    },
+    nodeId => {
+      unlockAudioOnce();
+      G.hoverNode = nodeId;
+      audio.select();
+      syncHudDOM();
+    },
+    () => {
+      unlockAudioOnce();
+      startRoll();
+    },
+  );
+}
+
+setupDOMControls();
 loadAllPrints();
-setTimeout(() => document.body.classList.add('ready'), 800);
+window.__ESR__.switchToBoard(0);
+document.body.classList.add('ready');
+tick();

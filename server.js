@@ -10,6 +10,7 @@ const path = require('path');
 const { URL } = require('url');
 
 const ROOT = path.resolve(__dirname, 'mobile');
+const THREE_ROOT = path.resolve(__dirname, 'node_modules', 'three');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 
@@ -45,7 +46,7 @@ function securityHeaders(extra = {}) {
     'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
     'Content-Security-Policy':
       "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; " +
-      "script-src 'self'; font-src 'self'; connect-src 'self'; media-src 'self' blob:; " +
+      "script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; media-src 'self' blob:; " +
       "object-src 'none'; base-uri 'self'",
     ...extra,
   };
@@ -60,6 +61,18 @@ function safePath(urlPath) {
   }
   if (decoded.includes('\0')) return null;
   const normalized = path.posix.normalize(decoded.replace(/\\/g, '/'));
+  if (normalized === '/vendor/three.module.js' || normalized === '/vendor/three.core.js') {
+    const file = path.basename(normalized);
+    return path.resolve(THREE_ROOT, 'build', file);
+  }
+  if (normalized.startsWith('/vendor/three-addons/')) {
+    const sub = normalized.slice('/vendor/three-addons/'.length);
+    const target = path.resolve(THREE_ROOT, 'examples', 'jsm', sub);
+    if (target.startsWith(path.resolve(THREE_ROOT, 'examples', 'jsm') + path.sep)) {
+      return target;
+    }
+    return null;
+  }
   const relative = normalized.replace(/^\/+/, '');
   const absolute = path.resolve(ROOT, relative || 'index.html');
   if (absolute !== ROOT && !absolute.startsWith(ROOT + path.sep)) return null;

@@ -13,6 +13,7 @@ import {
 } from './art_scenes.js';
 import { getPrint, getPrintURL } from './prints.js';
 import { BOARDS } from './boards.js';
+import { renderNishikieScene } from './nishikie_woodblock.js';
 
 export {
   PALETTE, washiPaper, bokashi, drawPattern, drawSeal, drawKomae, drawCloud,
@@ -25,17 +26,9 @@ export function drawNodeArt(ctx, boardIndex, node, x, y, w, h) {
   ctx.beginPath();
   ctx.rect(x, y, w, h);
   ctx.clip();
-  if (node.kind === 'goal') {
-    drawGoalScene(ctx, node.art, x, y, w, h);
-  } else if (boardIndex === 0) {
-    drawTokaidoScene(ctx, node.art, x, y, w, h, node.palette || 0);
-  } else if (boardIndex === 1) {
-    drawYokaiScene(ctx, node.art, x, y, w, h, node.palette || 0);
-  } else if (boardIndex === 2) {
-    drawWarriorScene(ctx, node.art, x, y, w, h, node.palette || 0);
-  } else {
-    drawGenjiScene(ctx, node.art, x, y, w, h, node.palette || 0);
-  }
+  ctx.translate(x, y);
+  const boardId = BOARDS[boardIndex]?.id || 'tokaido';
+  renderNishikieScene(ctx, boardId, node, w, h);
   ctx.restore();
 }
 

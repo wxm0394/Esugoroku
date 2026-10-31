@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#17110f">
-  <meta name="description" content="江戸浮世絵・絵双六 ─ 四巻の浮世絵画帖、三十六枚の錦絵札、三枚の懐中守り札、C11/JS 二重規則エンジンで遊ぶ本格絵双六。">
+  <meta name="theme-color" content="#14100d">
+  <meta name="description" content="江戸浮世絵・絵双六 ─ 四巻の浮世絵画帖、三十六枚の錦絵札、三枚の懐中守り札、C11/JS 二重規則エンジンで遊ぶ本格3D立体絵双六。">
   <meta property="og:title" content="江戸浮世絵・絵双六 ─ E-Sugoroku">
-  <meta property="og:description" content="江戸浮世絵・絵双六 ─ 四巻の浮世絵画帖、三十六枚の錦絵札、三枚の懐中守り札、C11/JS 二重規則エンジンで遊ぶ本格絵双六。">
+  <meta property="og:description" content="江戸浮世絵・絵双六 ─ 四巻の浮世絵画帖、三十六枚の錦絵札、三枚の懐中守り札、C11/JS 二重規則エンジンで遊ぶ本格3D立体絵双六。">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -15,13 +15,282 @@
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="fonts.css">
   <link rel="stylesheet" href="styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/vendor/three.module.js",
+      "three/addons/": "/vendor/three-addons/"
+    }
+  }
+  </script>
 </head>
 <body>
+  <!-- 3D WebGL Tabletop Mount -->
+  <div id="webgl-mount" aria-label="3D 浮世絵双六盤面"></div>
+
+  <!-- Legacy 2D Canvas kept synced for deterministic E2E & fallback -->
   <canvas id="stage" width="1280" height="800" aria-label="江戸浮世絵・絵双六の盤面"></canvas>
+
+  <!-- Semantic High-Contrast DOM UI Overlay -->
+  <div id="hud-root">
+    <div class="hud-top-stack">
+      <!-- Top Navigation Bar (3-Zone Contract) -->
+      <header class="topbar">
+        <div class="topbar-brand">
+          <span class="brand-seal">双</span>
+          <span class="brand-title">江戸浮世絵・立体絵双六</span>
+        </div>
+
+        <nav class="topbar-nav" aria-label="画帖切替と視点">
+          <button type="button" class="nav-link active" data-board="0">壱・東海道</button>
+          <button type="button" class="nav-link" data-board="1">弐・百物語</button>
+          <button type="button" class="nav-link" data-board="2">参・武将決集</button>
+          <button type="button" class="nav-link" data-board="3">肆・源氏善悪</button>
+          <span class="nav-divider" aria-hidden="true">|</span>
+          <button type="button" class="nav-link cam-btn active" data-cam="tabletop">斜視3D</button>
+          <button type="button" class="nav-link cam-btn" data-cam="topdown">俯瞰全景</button>
+          <button type="button" class="nav-link cam-btn" data-cam="follow">特写追従</button>
+        </nav>
+
+        <div class="topbar-actions">
+          <button type="button" id="btn-tutorial" class="action-btn secondary">📖 新手引導</button>
+          <button type="button" id="btn-gallery" class="action-btn secondary">🖼️ 錦絵図鑑</button>
+          <button type="button" id="btn-audio" class="action-btn secondary">🔊 効果音: 開</button>
+          <button type="button" id="btn-lobby" class="action-btn primary">画帖一覧</button>
+        </div>
+      </header>
+
+      <!-- Live Beginner Coach & Turn Banner -->
+      <section id="coach-banner" class="coach-banner" aria-live="polite">
+        <div class="coach-step-badge" id="coach-badge">手番案内</div>
+        <div class="coach-texts">
+          <div class="coach-main" id="coach-main">あなたの番です ─ 下の「🎲 賽を振る」ボタンを押すか、3D賽碗をクリックして骨骰を投げてください</div>
+          <div class="coach-sub" id="coach-sub">盤上の ①〜⑥ マーカーは、出目 1〜6 が出た時の着地マスをリアルタイム表示しています（ドラッグで3D視点回転・ホイールで拡大縮小）</div>
+        </div>
+        <button type="button" id="btn-coach-help" class="coach-help-btn">遊び方詳細</button>
+      </section>
+    </div>
+
+    <!-- Floating Event Stamp / Toast Banner -->
+    <div id="event-toast" class="event-toast hidden" role="status">
+      <div class="event-toast-title" id="event-toast-title">名物跳び</div>
+      <div class="event-toast-sub" id="event-toast-sub">二格進む</div>
+    </div>
+
+    <!-- Collapsible Bottom Control Dock (Zero Side-Panel Clutter) -->
+    <div id="bottom-dock-wrap" class="bottom-dock-wrap">
+      <button type="button" id="btn-dock-toggle" class="dock-toggle-btn" title="操作パネルを折りたたむ / 展開する (H)">
+        ▾ 操作パネルを隠す (Zen Mode)
+      </button>
+
+      <footer id="bottom-dock" class="bottom-dock">
+        <!-- Zone 1: Players & Board Progress -->
+        <div class="dock-section dock-players">
+          <div class="dock-section-header">
+            <span id="dock-volume-title">巻ノ壱・東海道五十三次</span>
+            <span class="dock-meta-sep">·</span>
+            <span id="dock-rule-tag">廻り双六（点点一致で上り）</span>
+          </div>
+          <div class="player-rows">
+            <div class="player-row active" id="player-row-0">
+              <span class="pawn-swatch human">旅</span>
+              <div class="player-info">
+                <div class="player-name">あなた（旅人） <span class="turn-tag" id="turn-tag-0">手番中</span></div>
+                <div class="player-pos" id="player-pos-0">現在地: #0 日本橋</div>
+              </div>
+            </div>
+            <div class="player-row" id="player-row-1">
+              <span class="pawn-swatch ai">伴</span>
+              <div class="player-info">
+                <div class="player-name">同行者（相手） <span class="turn-tag hidden" id="turn-tag-1">思考中</span></div>
+                <div class="player-pos" id="player-pos-1">現在地: #0 日本橋</div>
+              </div>
+            </div>
+          </div>
+          <div class="board-special-meter" id="board-special-meter">
+            宿場名物: 0 / 3 獲得 · 残り歩数: 16格
+          </div>
+        </div>
+
+        <!-- Zone 2: Tile Inspector & 3 Pocket Talismans -->
+        <div class="dock-section dock-inspector">
+          <div class="inspector-card">
+            <div class="inspector-header">
+              <span class="inspector-Index" id="insp-id">#0</span>
+              <strong class="inspector-title" id="insp-title">日本橋（振出・起点）</strong>
+              <span class="inspector-kind" id="insp-kind">起点</span>
+            </div>
+            <p class="inspector-desc" id="insp-desc">五街道の起点。ここから賽を振って京・八百善の大上り（#16）を目指します。</p>
+          </div>
+          <div class="charm-strip" aria-label="懐中守り札">
+            <div class="charm-item active" data-charm="stay" title="泊マスに止まった時、一休みを自動で無効化します">
+              <span class="charm-kanji">宿</span>
+              <div class="charm-text">
+                <strong>宿場守り</strong>
+                <span>「泊」休みを一回無効化</span>
+              </div>
+            </div>
+            <div class="charm-item active" data-charm="guard" title="怪異マスで後ろへ戻される跳びを自動で防ぎます">
+              <span class="charm-kanji">封</span>
+              <div class="charm-text">
+                <strong>妖怪封じ</strong>
+                <span>後ろ戻りの跳びを無効化</span>
+              </div>
+            </div>
+            <div class="charm-item active" data-charm="dash" title="最初の1投目で自動的に歩数を+1格伸ばします">
+              <span class="charm-kanji">駆</span>
+              <div class="charm-text">
+                <strong>早駕籠</strong>
+                <span>初手の出目を＋1歩加速</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Zone 3: Big 3D Dice Readout & Roll CTA -->
+        <div class="dock-section dock-dice">
+          <div class="dice-readout-box">
+            <div class="die-face-preview" id="die-face-preview" data-value="1" aria-label="現在の出目">
+              <span class="pip center red"></span>
+            </div>
+            <div class="dice-readout-meta">
+              <div class="dice-label">直近の賽の目</div>
+              <div class="dice-number" id="dice-number-text">壱 (1点)</div>
+            </div>
+          </div>
+          <button type="button" id="btn-roll" class="roll-cta-btn">
+            <span class="roll-cta-main">🎲 賽を振る (Space)</span>
+            <span class="roll-cta-sub">碗に骨骰を投げて進む</span>
+          </button>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Board Selection / Lobby Screen Overlay -->
+    <div id="lobby-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="四巻の浮世絵画帖を選択">
+      <div class="modal-panel lobby-panel">
+        <div class="modal-header">
+          <div>
+            <h1 class="modal-title">江戸浮世絵・立体絵双六 ─ 画帖選択</h1>
+            <p class="modal-subtitle">遊びたい浮世絵画帖（全四巻）を選んで対局を開始してください。各巻ごとに独自の立体盤面と規則が楽しめます。</p>
+          </div>
+          <button type="button" id="btn-lobby-close" class="modal-close-btn">✕ 盤面へ戻る</button>
+        </div>
+
+        <div class="lobby-grid">
+          <article class="volume-card" data-select-board="0">
+            <div class="volume-card-badge">巻ノ壱 · 初心者おすすめ</div>
+            <h2 class="volume-card-title">東海道・御府内名物道中双六</h2>
+            <p class="volume-card-rule"><strong>廻り双六（渦巻回廊）</strong>：時計回りに進み、赤丸「泊」は1回休み、名物料理マスは前方へジャンプ！ゴールはぴったり止まる「点点一致」ルール。</p>
+            <div class="volume-card-footer">
+              <span>全17格 · 広重風錦絵</span>
+              <button type="button" class="volume-play-btn" data-play-board="0">この画帖で遊ぶ →</button>
+            </div>
+          </article>
+
+          <article class="volume-card" data-select-board="1">
+            <div class="volume-card-badge">巻ノ弐 · 飛び双六</div>
+            <h2 class="volume-card-title">百物語・妖怪変化飛び双六</h2>
+            <p class="volume-card-rule"><strong>飛び双六（大小組絵）</strong>：出目1〜6ごとに異なるマスへ一気に飛ぶ古式双六。怪異マスで四隅の青行灯が消えると「百鬼夜行（飛距離2倍）」が発動！</p>
+            <div class="volume-card-footer">
+              <span>全13格 · 国芳・石燕風</span>
+              <button type="button" class="volume-play-btn" data-play-board="1">この画帖で遊ぶ →</button>
+            </div>
+          </article>
+
+          <article class="volume-card" data-select-board="2">
+            <div class="volume-card-badge">巻ノ参 · 武将集結</div>
+            <h2 class="volume-card-title">太平記・英雄武将決集双六</h2>
+            <p class="volume-card-rule"><strong>決集双六（扇面傾き札）</strong>：道中で三つの討入備え（兜・太刀・陣太鼓）をすべて集めなければ御前の上りが開かない戦略双六。同じマスに止まると一騎討ち！</p>
+            <div class="volume-card-footer">
+              <span>全14格 · 武者絵錦絵</span>
+              <button type="button" class="volume-play-btn" data-play-board="2">この画帖で遊ぶ →</button>
+            </div>
+          </article>
+
+          <article class="volume-card" data-select-board="3">
+            <div class="volume-card-badge">巻ノ肆 · 善悪二道</div>
+            <h2 class="volume-card-title">源氏物語・善玉悪玉道中双六</h2>
+            <p class="volume-card-rule"><strong>分かれ双六（善悪分岐）</strong>：分岐マスで偶数が出れば金色の「善道（近道）」、奇数が出れば紫の「悪道（足止め）」へ進む王朝絵巻双六。</p>
+            <div class="volume-card-footer">
+              <span>全15格 · 国貞風源氏絵</span>
+              <button type="button" class="volume-play-btn" data-play-board="3">この画帖で遊ぶ →</button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interactive 3-Step Beginner Onboarding Modal (新手引导) -->
+    <div id="tutorial-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="新手引導と遊び方">
+      <div class="modal-panel tutorial-panel">
+        <div class="modal-header">
+          <div>
+            <h2 class="modal-title">📖 三分でわかる立体絵双六・新手引導</h2>
+            <p class="modal-subtitle">江戸時代の木版ボードゲーム「絵双六（えすごろく）」を3Dテーブルトップで再現しました。</p>
+          </div>
+          <button type="button" id="btn-tutorial-close" class="modal-close-btn">✕ 閉じて対局へ</button>
+        </div>
+
+        <div class="tutorial-steps">
+          <div class="tutorial-step-card">
+            <div class="step-num">壱</div>
+            <h3>1. 賽（サイコロ）を振って進む</h3>
+            <p>画面右下の大きな赤いボタン<strong>「🎲 賽を振る (Space)」</strong>を押すか、3D盤面右側の<strong>磁器茶碗（賽碗）</strong>をクリックすると骨骰が転がります。伝統の和賽は<strong>「一」の目が大きな朱色</strong>で描かれており、真上を向いた面の数が進める歩数です。</p>
+          </div>
+
+          <div class="tutorial-step-card">
+            <div class="step-num">弐</div>
+            <h3>2. 盤上の ①〜⑥ 着地予測と立体駒</h3>
+            <p>あなたの番になると、3D盤面上に<strong>「① 1点〜⑥ 6点」</strong>の吹き出しが表示されます。どの目が出たらどのマスに止まるかが事前にひと目で分かります。また任意の3D木版マスにマウスを乗せると、左下の解説枠に大きな文字で効果が表示されます。</p>
+          </div>
+
+          <div class="tutorial-step-card">
+            <div class="step-num">参</div>
+            <h3>3. 特殊マスと三枚の懐中守り</h3>
+            <p><strong>「跳」</strong>マスは前方へ一気にジャンプ、<strong>「泊」</strong>マスは1回休みです。ただしあなたが携帯している三枚の護符（<strong>宿場守り・妖怪封じ・早駕籠</strong>）が不利な効果を自動的に打ち消し、初手を+1歩加速してくれます！</p>
+          </div>
+        </div>
+
+        <div class="tutorial-footer">
+          <button type="button" id="btn-tutorial-sound" class="action-btn secondary">🔊 江戸和楽器・木駒の効果音を試聴する</button>
+          <button type="button" id="btn-tutorial-start" class="roll-cta-btn compact">さっそく対局を始める →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 36 Nishiki-e Print Gallery Modal -->
+    <div id="gallery-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="錦絵図鑑（三十六景）">
+      <div class="modal-panel gallery-panel">
+        <div class="modal-header">
+          <div>
+            <h2 class="modal-title">🖼️ 江戸浮世絵・三十六景錦絵図鑑</h2>
+            <p class="modal-subtitle" id="gallery-count-label">蒐集状況: 18 / 36 枚 開帳済み</p>
+          </div>
+          <button type="button" id="btn-gallery-close" class="modal-close-btn">✕ 閉じる</button>
+        </div>
+        <div id="gallery-grid" class="gallery-grid"></div>
+      </div>
+    </div>
+
+    <!-- Victory / Settlement Modal -->
+    <div id="settlement-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="対局終局">
+      <div class="modal-panel settlement-panel">
+        <div class="settlement-seal" id="settlement-seal">上</div>
+        <h2 class="modal-title" id="settlement-title">見事、大上り！</h2>
+        <p class="modal-subtitle" id="settlement-sub">東海道五十三次を踏破し、京・八百善へ一番乗りを果たしました。</p>
+        <div class="settlement-actions">
+          <button type="button" id="btn-play-again" class="roll-cta-btn compact">もう一度対局する</button>
+          <button type="button" id="btn-settlement-lobby" class="action-btn secondary">別の画帖を選ぶ</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="loading" aria-hidden="true">
     <div class="loading-seal">双</div>
-    <p>錦絵を摺り上げています</p>
-    <span>C11 RULES ・ JS MIRROR ・ UKIYO-E PRINTMAKER</span>
+    <p>立体錦絵盤面を摺り上げています</p>
+    <span>3D WOODBLOCK TABLETOP ・ C11/JS RULES ENGINE</span>
   </div>
   <noscript>この絵双六は JavaScript を有効にして遊びます。</noscript>
   <script type="module" src="js/main.js"></script>

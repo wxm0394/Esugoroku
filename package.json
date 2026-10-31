@@ -9,5 +9,8 @@
     "build": "node tools/test_js_rules.mjs",
     "lint": "node --check server.js && node --check mobile/js/main.js",
     "test": "node tools/test_js_rules.mjs"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
   }
 }
