@@ -1,0 +1,1533 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2024-11-06T16:00:00Z",
+  "source": "docs/ASSET_INVENTORY.md audit",
+  "assets": {
+    "board.tokaido.background": {
+      "type": "image",
+      "path": "images/boards/tokaido/background.jpg",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Tokaido sugoroku board background",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED",
+        "attribution": "待核实",
+        "source": "public/assets/aistudio/v2-de9b2227c1ae60d2ad93091f2c368ba2_r_33d70672.jpg",
+        "sourceUrl": "https://www.tnm.jp/collection/..."
+      }
+    },
+    "board.yokai.background": {
+      "type": "image",
+      "path": "images/boards/yokai/background.jpg",
+      "group": "board.yokai",
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Yokai sugoroku board background",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED",
+        "attribution": "待核实",
+        "source": "public/assets/aistudio/v2-be2eef69ff02fff49f3a362045aa1bb0_r_5a6413a7.jpg",
+        "sourceUrl": "https://www.tnm.jp/collection/..."
+      }
+    },
+    "board.kesshu.background": {
+      "type": "image",
+      "path": "images/boards/kesshu/background.jpg",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Kesshu sugoroku board background",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED",
+        "attribution": "待核实",
+        "source": "public/assets/aistudio/v2-66c8cbba45a5e5db3bbeae4d884a556c_r_a1e662dd.jpg",
+        "sourceUrl": "https://www.tnm.jp/collection/..."
+      }
+    },
+    "board.genji.background": {
+      "type": "image",
+      "path": "images/boards/genji/background.jpg",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Genji sugoroku board background",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED",
+        "attribution": "待核实",
+        "source": "public/assets/aistudio/v2-2ea7f57afdf0bf62b4d0d8854269efe9_r_cfd81106.jpg",
+        "sourceUrl": "https://www.tnm.jp/collection/..."
+      }
+    },
+    "piece.kokeshi": {
+      "type": "model",
+      "path": "models/characters/kokeshi/kokeshi.glb",
+      "group": "piece.kokeshi",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "3D Kokeshi wooden piece model",
+        "historicalStatus": "original-artwork",
+        "license": "original-artwork",
+        "attribution": "E-Sugoroku project"
+      }
+    },
+    "model.dice.bone": {
+      "type": "model",
+      "path": "models/props/dice/bone.glb",
+      "group": "model.dice",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "3D bone dice model with numbered faces",
+        "historicalStatus": "original-artwork",
+        "license": "original-artwork",
+        "attribution": "E-Sugoroku project"
+      }
+    },
+    "audio.sfx.dice-roll": {
+      "type": "audio",
+      "path": "audio/sfx/dice-roll.ogg",
+      "group": "audio.common",
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Bone dice roll sound effect",
+        "historicalStatus": "original-artwork",
+        "license": "original-artwork",
+        "attribution": "E-Sugoroku project"
+      }
+    },
+    "audio.sfx.wood-clack": {
+      "type": "audio",
+      "path": "audio/sfx/wood-clack.ogg",
+      "group": "audio.common",
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Wood clack sound effect for board tiles",
+        "historicalStatus": "original-artwork",
+        "license": "original-artwork",
+        "attribution": "E-Sugoroku project"
+      }
+    },
+    "audio.bgm.tokaido": {
+      "type": "audio",
+      "path": "audio/bgm/tokaido/shamisen-koto.mp3",
+      "group": "audio.bgm",
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Tokaido BGM - Shamisen & Koto",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED",
+        "attribution": "待核实",
+        "source": "public/assets/aistudio/v2-de9b2227c1ae60d2ad93091f2c368ba2_r_33d70672.jpg",
+        "sourceUrl": "https://www.tnm.jp/collection/..."
+      }
+    },
+    "audio.bgm.yokai": {
+      "type": "audio",
+      "path": "audio/bgm/yokai/shamisen-koto.mp3",
+      "group": "audio.bgm",
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Yokai BGM - Shamisen & Koto",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED",
+        "attribution": "待核实",
+        "source": "public/assets/aistudio/v2-be2eef69ff02fff49f3a362045aa1bb0_r_5a6413a7.jpg",
+        "sourceUrl": "https://www.tnm.jp/collection/..."
+      }
+    },
+    "audio.bgm.kesshu": {
+      "type": "audio",
+      "path": "audio/bgm/kesshu/shamisen-koto.mp3",
+      "group": "audio.bgm",
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Kesshu BGM - Shamisen & Koto",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED",
+        "attribution": "待核实",
+        "source": "public/assets/aistudio/v2-66c8cbba45a5e5db3bbeae4d884a556c_r_a1e662dd.jpg",
+        "sourceUrl": "https://www.tnm.jp/collection/..."
+      }
+    },
+    "audio.bgm.genji": {
+      "type": "audio",
+      "path": "audio/bgm/genji/shamisen-koto.mp3",
+      "group": "audio.bgm",
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Genji BGM - Shamisen & Koto",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED",
+        "attribution": "待核实",
+        "source": "public/assets/aistudio/v2-2ea7f57afdf0bf62b4d0d8854269efe9_r_cfd81106.jpg",
+        "sourceUrl": "https://www.tnm.jp/collection/..."
+      }
+    },
+    "ui.icon.dice": {
+      "type": "image",
+      "path": "assets/icon.svg",
+      "group": "ui.icon",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "UI dice icon",
+        "historicalStatus": "original-artwork",
+        "license": "original-artwork",
+        "attribution": "E-Sugoroku project"
+      }
+    },
+    "font.shippori-mincho": {
+      "type": "font",
+      "path": "fonts/shipporiminchob1_001.woff2",
+      "group": "font.shippori-mincho",
+      "platforms": [
+        "web"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Shippori Mincho Japanese font",
+        "historicalStatus": "original-artwork",
+        "license": "UNVERIFIED",
+        "attribution": "待核实",
+        "source": "mobile/assets/fonts/shipporiminchob1_001_wXK1E2wCr44tulPdnn-xbIpJ9RgT9-nKLoxP2xCx5m9m2kVb449GP2pukmm_jQafeeM.0.woff2"
+      }
+    },
+    "print.tokaido.nihonbashi": {
+      "type": "image",
+      "path": "assets/prints/tokaido_nihonbashi.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/nihonbashi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_nihonbashi.webp"
+      }
+    },
+    "print.tokaido.shinagawa": {
+      "type": "image",
+      "path": "assets/prints/tokaido_shinagawa.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/shinagawa",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_shinagawa.webp"
+      }
+    },
+    "print.tokaido.dojo": {
+      "type": "image",
+      "path": "assets/prints/tokaido_dojo.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/dojo",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_dojo.webp"
+      }
+    },
+    "print.tokaido.kawasaki": {
+      "type": "image",
+      "path": "assets/prints/tokaido_kawasaki.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/kawasaki",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_kawasaki.webp"
+      }
+    },
+    "print.tokaido.tsurumi": {
+      "type": "image",
+      "path": "assets/prints/tokaido_tsurumi.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/tsurumi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_tsurumi.webp"
+      }
+    },
+    "print.tokaido.kanagawa": {
+      "type": "image",
+      "path": "assets/prints/tokaido_kanagawa.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/kanagawa",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_kanagawa.webp"
+      }
+    },
+    "print.tokaido.hodogaya": {
+      "type": "image",
+      "path": "assets/prints/tokaido_hodogaya.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/hodogaya",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_hodogaya.webp"
+      }
+    },
+    "print.tokaido.inari": {
+      "type": "image",
+      "path": "assets/prints/tokaido_inari.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/inari",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_inari.webp"
+      }
+    },
+    "print.tokaido.totsuka": {
+      "type": "image",
+      "path": "assets/prints/tokaido_totsuka.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/totsuka",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_totsuka.webp"
+      }
+    },
+    "print.tokaido.fujisawa": {
+      "type": "image",
+      "path": "assets/prints/tokaido_fujisawa.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/fujisawa",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_fujisawa.webp"
+      }
+    },
+    "print.tokaido.hiratsuka": {
+      "type": "image",
+      "path": "assets/prints/tokaido_hiratsuka.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/hiratsuka",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_hiratsuka.webp"
+      }
+    },
+    "print.tokaido.oiso": {
+      "type": "image",
+      "path": "assets/prints/tokaido_oiso.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/oiso",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_oiso.webp"
+      }
+    },
+    "print.tokaido.tea": {
+      "type": "image",
+      "path": "assets/prints/tokaido_tea.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/tea",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_tea.webp"
+      }
+    },
+    "print.tokaido.odawara": {
+      "type": "image",
+      "path": "assets/prints/tokaido_odawara.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/odawara",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_odawara.webp"
+      }
+    },
+    "print.tokaido.hakone": {
+      "type": "image",
+      "path": "assets/prints/tokaido_hakone.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/hakone",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_hakone.webp"
+      }
+    },
+    "print.tokaido.mishima": {
+      "type": "image",
+      "path": "assets/prints/tokaido_mishima.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/mishima",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_mishima.webp"
+      }
+    },
+    "print.tokaido.kyoto": {
+      "type": "image",
+      "path": "assets/prints/tokaido_kyoto.webp",
+      "group": "board.tokaido",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for tokaido/kyoto",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/tokaido_kyoto.webp"
+      }
+    },
+    "print.yokai.kappa": {
+      "type": "image",
+      "path": "assets/prints/yokai_kappa.webp",
+      "group": "board.yokai",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for yokai/kappa",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/yokai_kappa.webp"
+      }
+    },
+    "print.yokai.yukionna": {
+      "type": "image",
+      "path": "assets/prints/yokai_yukionna.webp",
+      "group": "board.yokai",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for yokai/yukionna",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/yokai_yukionna.webp"
+      }
+    },
+    "print.yokai.nekomata": {
+      "type": "image",
+      "path": "assets/prints/yokai_nekomata.webp",
+      "group": "board.yokai",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for yokai/nekomata",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/yokai_nekomata.webp"
+      }
+    },
+    "print.yokai.chagama": {
+      "type": "image",
+      "path": "assets/prints/yokai_chagama.webp",
+      "group": "board.yokai",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for yokai/chagama",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/yokai_chagama.webp"
+      }
+    },
+    "print.yokai.sanme": {
+      "type": "image",
+      "path": "assets/prints/yokai_sanme.webp",
+      "group": "board.yokai",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for yokai/sanme",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/yokai_sanme.webp"
+      }
+    },
+    "print.yokai.funayurei": {
+      "type": "image",
+      "path": "assets/prints/yokai_funayurei.webp",
+      "group": "board.yokai",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for yokai/funayurei",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/yokai_funayurei.webp"
+      }
+    },
+    "print.yokai.oiwa": {
+      "type": "image",
+      "path": "assets/prints/yokai_oiwa.webp",
+      "group": "board.yokai",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for yokai/oiwa",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/yokai_oiwa.webp"
+      }
+    },
+    "print.yokai.rokuro": {
+      "type": "image",
+      "path": "assets/prints/yokai_rokuro.webp",
+      "group": "board.yokai",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for yokai/rokuro",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/yokai_rokuro.webp"
+      }
+    },
+    "print.yokai.kyubi": {
+      "type": "image",
+      "path": "assets/prints/yokai_kyubi.webp",
+      "group": "board.yokai",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for yokai/kyubi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/yokai_kyubi.webp"
+      }
+    },
+    "print.yokai.hyakumonogatari": {
+      "type": "image",
+      "path": "assets/prints/yokai_hyakumonogatari.webp",
+      "group": "board.yokai",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for yokai/hyakumonogatari",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/yokai_hyakumonogatari.webp"
+      }
+    },
+    "print.kesshu.shootsujin": {
+      "type": "image",
+      "path": "assets/prints/kesshu_shootsujin.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/shootsujin",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_shootsujin.webp"
+      }
+    },
+    "print.kesshu.yari": {
+      "type": "image",
+      "path": "assets/prints/kesshu_yari.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/yari",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_yari.webp"
+      }
+    },
+    "print.kesshu.yumi": {
+      "type": "image",
+      "path": "assets/prints/kesshu_yumi.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/yumi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_yumi.webp"
+      }
+    },
+    "print.kesshu.kabuto": {
+      "type": "image",
+      "path": "assets/prints/kesshu_kabuto.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/kabuto",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_kabuto.webp"
+      }
+    },
+    "print.kesshu.gungi": {
+      "type": "image",
+      "path": "assets/prints/kesshu_gungi.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/gungi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_gungi.webp"
+      }
+    },
+    "print.kesshu.oyoroi": {
+      "type": "image",
+      "path": "assets/prints/kesshu_oyoroi.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/oyoroi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_oyoroi.webp"
+      }
+    },
+    "print.kesshu.ikkit": {
+      "type": "image",
+      "path": "assets/prints/kesshu_ikkit.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/ikkit",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_ikkit.webp"
+      }
+    },
+    "print.kesshu.tachi": {
+      "type": "image",
+      "path": "assets/prints/kesshu_tachi.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/tachi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_tachi.webp"
+      }
+    },
+    "print.kesshu.meiyaku": {
+      "type": "image",
+      "path": "assets/prints/kesshu_meiyaku.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/meiyaku",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_meiyaku.webp"
+      }
+    },
+    "print.kesshu.shinobi": {
+      "type": "image",
+      "path": "assets/prints/kesshu_shinobi.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/shinobi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_shinobi.webp"
+      }
+    },
+    "print.kesshu.tekijin": {
+      "type": "image",
+      "path": "assets/prints/kesshu_tekijin.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/tekijin",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_tekijin.webp"
+      }
+    },
+    "print.kesshu.jindaiko": {
+      "type": "image",
+      "path": "assets/prints/kesshu_jindaiko.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/jindaiko",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_jindaiko.webp"
+      }
+    },
+    "print.kesshu.kesshi": {
+      "type": "image",
+      "path": "assets/prints/kesshu_kesshi.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/kesshi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_kesshi.webp"
+      }
+    },
+    "print.kesshu.kachidoki": {
+      "type": "image",
+      "path": "assets/prints/kesshu_kachidoki.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/kachidoki",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_kachidoki.webp"
+      }
+    },
+    "print.kesshu.agarimae": {
+      "type": "image",
+      "path": "assets/prints/kesshu_agarimae.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/agarimae",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_agarimae.webp"
+      }
+    },
+    "print.kesshu.agari": {
+      "type": "image",
+      "path": "assets/prints/kesshu_agari.webp",
+      "group": "board.kesshu",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for kesshu/agari",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/kesshu_agari.webp"
+      }
+    },
+    "print.genji.kiritsubo": {
+      "type": "image",
+      "path": "assets/prints/genji_kiritsubo.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/kiritsubo",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_kiritsubo.webp"
+      }
+    },
+    "print.genji.hahakigi": {
+      "type": "image",
+      "path": "assets/prints/genji_hahakigi.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/hahakigi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_hahakigi.webp"
+      }
+    },
+    "print.genji.utsusemi": {
+      "type": "image",
+      "path": "assets/prints/genji_utsusemi.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/utsusemi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_utsusemi.webp"
+      }
+    },
+    "print.genji.yugao": {
+      "type": "image",
+      "path": "assets/prints/genji_yugao.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/yugao",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_yugao.webp"
+      }
+    },
+    "print.genji.wakamurasaki": {
+      "type": "image",
+      "path": "assets/prints/genji_wakamurasaki.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/wakamurasaki",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_wakamurasaki.webp"
+      }
+    },
+    "print.genji.suetsumuhana": {
+      "type": "image",
+      "path": "assets/prints/genji_suetsumuhana.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/suetsumuhana",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_suetsumuhana.webp"
+      }
+    },
+    "print.genji.momijinoga": {
+      "type": "image",
+      "path": "assets/prints/genji_momijinoga.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/momijinoga",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_momijinoga.webp"
+      }
+    },
+    "print.genji.hananoen": {
+      "type": "image",
+      "path": "assets/prints/genji_hananoen.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/hananoen",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_hananoen.webp"
+      }
+    },
+    "print.genji.aoi": {
+      "type": "image",
+      "path": "assets/prints/genji_aoi.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/aoi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_aoi.webp"
+      }
+    },
+    "print.genji.sakaki": {
+      "type": "image",
+      "path": "assets/prints/genji_sakaki.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/sakaki",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_sakaki.webp"
+      }
+    },
+    "print.genji.hanachirusato": {
+      "type": "image",
+      "path": "assets/prints/genji_hanachirusato.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/hanachirusato",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_hanachirusato.webp"
+      }
+    },
+    "print.genji.suma": {
+      "type": "image",
+      "path": "assets/prints/genji_suma.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/suma",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_suma.webp"
+      }
+    },
+    "print.genji.akashi": {
+      "type": "image",
+      "path": "assets/prints/genji_akashi.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/akashi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_akashi.webp"
+      }
+    },
+    "print.genji.miotsukushi": {
+      "type": "image",
+      "path": "assets/prints/genji_miotsukushi.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/miotsukushi",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_miotsukushi.webp"
+      }
+    },
+    "print.genji.yomogiu": {
+      "type": "image",
+      "path": "assets/prints/genji_yomogiu.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/yomogiu",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_yomogiu.webp"
+      }
+    },
+    "print.genji.sekiya": {
+      "type": "image",
+      "path": "assets/prints/genji_sekiya.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/sekiya",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_sekiya.webp"
+      }
+    },
+    "print.genji.eawase": {
+      "type": "image",
+      "path": "assets/prints/genji_eawase.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/eawase",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_eawase.webp"
+      }
+    },
+    "print.genji.matsukaze": {
+      "type": "image",
+      "path": "assets/prints/genji_matsukaze.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/matsukaze",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_matsukaze.webp"
+      }
+    },
+    "print.genji.usugumo": {
+      "type": "image",
+      "path": "assets/prints/genji_usugumo.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/usugumo",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_usugumo.webp"
+      }
+    },
+    "print.genji.asagao": {
+      "type": "image",
+      "path": "assets/prints/genji_asagao.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/asagao",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_asagao.webp"
+      }
+    },
+    "print.genji.otome": {
+      "type": "image",
+      "path": "assets/prints/genji_otome.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/otome",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_otome.webp"
+      }
+    },
+    "print.genji.tamakazura": {
+      "type": "image",
+      "path": "assets/prints/genji_tamakazura.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/tamakazura",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_tamakazura.webp"
+      }
+    },
+    "print.genji.genji": {
+      "type": "image",
+      "path": "assets/prints/genji_genji.webp",
+      "group": "board.genji",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for genji/genji",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/genji_genji.webp"
+      }
+    },
+    "charm.charm_stay": {
+      "type": "image",
+      "path": "assets/prints/charm_stay.webp",
+      "group": "charm",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for charms/charm_stay",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/charm_stay.webp"
+      }
+    },
+    "charm.charm_guard": {
+      "type": "image",
+      "path": "assets/prints/charm_guard.webp",
+      "group": "charm",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for charms/charm_guard",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/charm_guard.webp"
+      }
+    },
+    "charm.charm_dash": {
+      "type": "image",
+      "path": "assets/prints/charm_dash.webp",
+      "group": "charm",
+      "platforms": [
+        "web",
+        "mobile"
+      ],
+      "variants": [],
+      "metadata": {
+        "description": "Ukiyo-e print cut for charms/charm_dash",
+        "historicalStatus": "historical-adaptation",
+        "license": "public-domain",
+        "attribution": "Edo Ukiyo-e Woodblock Print Cut",
+        "source": "assets/prints/charm_dash.webp"
+      }
+    }
+  },
+  "groups": {
+    "board.tokaido": {
+      "description": "Tokaido board assets",
+      "assets": [
+        "board.tokaido.background"
+      ],
+      "preload": true,
+      "platforms": [
+        "web",
+        "mobile"
+      ]
+    },
+    "board.yokai": {
+      "description": "Yokai board assets",
+      "assets": [
+        "board.yokai.background"
+      ],
+      "preload": true,
+      "platforms": [
+        "web",
+        "mobile"
+      ]
+    },
+    "board.kesshu": {
+      "description": "Kesshu board assets",
+      "assets": [
+        "board.kesshu.background"
+      ],
+      "preload": true,
+      "platforms": [
+        "web",
+        "mobile"
+      ]
+    },
+    "board.genji": {
+      "description": "Genji board assets",
+      "assets": [
+        "board.genji.background"
+      ],
+      "preload": true,
+      "platforms": [
+        "web",
+        "mobile"
+      ]
+    },
+    "piece.kokeshi": {
+      "description": "Kokeshi piece assets",
+      "assets": [
+        "piece.kokeshi"
+      ],
+      "preload": false,
+      "platforms": [
+        "web",
+        "mobile"
+      ]
+    },
+    "model.dice": {
+      "description": "Dice model assets",
+      "assets": [
+        "model.dice.bone"
+      ],
+      "preload": false,
+      "platforms": [
+        "web",
+        "mobile"
+      ]
+    },
+    "audio.common": {
+      "description": "Common sound effects used across all boards",
+      "assets": [
+        "audio.sfx.dice-roll",
+        "audio.sfx.wood-clack"
+      ],
+      "preload": false
+    },
+    "audio.bgm": {
+      "description": "Background music assets per board",
+      "assets": [
+        "audio.bgm.tokaido",
+        "audio.bgm.yokai",
+        "audio.bgm.kesshu",
+        "audio.bgm.genji"
+      ],
+      "preload": false
+    },
+    "ui.icon": {
+      "description": "UI icon assets",
+      "assets": [
+        "ui.icon.dice"
+      ],
+      "preload": false
+    },
+    "font.shippori-mincho": {
+      "description": "Shippori Mincho Japanese font assets",
+      "assets": [
+        "font.shippori-mincho"
+      ],
+      "preload": true,
+      "platforms": [
+        "web"
+      ]
+    }
+  }
+}

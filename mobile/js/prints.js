@@ -1,5 +1,6 @@
 // V2 print loader: real public-domain ukiyo-e textures for every card/node.
 import { PRINT_ASSETS, PRINT_ROOT } from './prints_assets.js';
+import AssetManager from '../../assets/asset-manager.js';
 
 const cache = new Map();
 const pending = new Map();
@@ -25,27 +26,35 @@ function load(src) {
   return promise;
 }
 
-// Resolve by board id + art key.  Returns an HTMLImageElement | null.
+// Resolve Asset ID for board id + art key
+export function getAssetId(boardId, art) {
+  if (boardId === 'charms') {
+    return `charm.${art}`;
+  }
+  return `print.${boardId}.${art}`;
+}
+
+// Resolve by board id + art key. Returns an HTMLImageElement | null.
 export function getPrint(boardId, art) {
-  const table = PRINT_ASSETS[boardId];
-  if (!table || !table[art]) return null;
-  const src = table[art];
+  const src = getPrintURL(boardId, art);
+  if (!src) return null;
   const entry = cache.get(src);
   if (entry) return entry;
   return null;
 }
 
 export function getPrintURL(boardId, art) {
+  const id = getAssetId(boardId, art);
+  const url = AssetManager.getUrl(id);
+  if (url && !url.includes('fallback-image')) return url;
   const table = PRINT_ASSETS[boardId];
   if (!table || !table[art]) return null;
   return table[art];
 }
 
 export function getCharmPrint(charmId) {
-  const table = PRINT_ASSETS.charms;
-  if (!table || !table[charmId]) return null;
-  const src = table[charmId];
-  return cache.get(src) || null;
+  const src = getPrintURL('charms', charmId);
+  return src ? cache.get(src) || null : null;
 }
 
 // Kick off loading immediately so textures are decoded before first paint.
@@ -53,10 +62,20 @@ export function loadAllPrints() {
   const urls = [];
   for (const boardId of ['tokaido', 'yokai', 'kesshu', 'genji']) {
     const table = PRINT_ASSETS[boardId];
-    if (table) for (const src of Object.values(table)) urls.push(src);
+    if (table) {
+      for (const artKey of Object.keys(table)) {
+        const url = getPrintURL(boardId, artKey);
+        if (url) urls.push(url);
+      }
+    }
   }
   const charmTable = PRINT_ASSETS.charms;
-  if (charmTable) for (const src of Object.values(charmTable)) urls.push(src);
+  if (charmTable) {
+    for (const charmKey of Object.keys(charmTable)) {
+      const url = getPrintURL('charms', charmKey);
+      if (url) urls.push(url);
+    }
+  }
   return Promise.all(urls.map(load));
 }
 

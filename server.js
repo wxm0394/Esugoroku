@@ -11,6 +11,7 @@ const { URL } = require('url');
 
 const ROOT = path.resolve(__dirname, 'mobile');
 const PUBLIC_ROOT = path.resolve(__dirname, 'public');
+const ASSETS_ROOT = path.resolve(__dirname, 'assets');
 const THREE_ROOT = path.resolve(__dirname, 'node_modules', 'three');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -81,6 +82,13 @@ function safePath(urlPath) {
       return target;
     }
     return null;
+  }
+  if (normalized.startsWith('/assets/')) {
+    const sub = normalized.slice('/assets/'.length);
+    const target = path.resolve(ASSETS_ROOT, sub);
+    if (target.startsWith(ASSETS_ROOT + path.sep) && fs.existsSync(target) && fs.statSync(target).isFile()) {
+      return target;
+    }
   }
   const relative = normalized.replace(/^\/+/, '');
   const absolute = path.resolve(ROOT, relative || 'index.html');

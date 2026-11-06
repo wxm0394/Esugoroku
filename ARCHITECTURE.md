@@ -65,7 +65,27 @@ E-Sugoroku is a 3D/2D ukiyo-e tabletop game built around four distinct Edo–Mei
 
 ---
 
-## 3. Verification Pipeline
+## 3. V2.1 Modular Asset System Architecture
+
+The V2.1 Modular Asset System decouples all physical and programmatic game assets (board backgrounds, card prints, BGM, SFX, 3D models, fonts, UI icons) from hardcoded paths in application logic through a decoupled, manifest-driven Asset ID resolution architecture:
+
+1. **Manifest Source of Truth (`assets/manifest/asset-manifest.json`)**:
+   - Every asset is registered under a dot-notation ID (e.g. `board.tokaido.background`, `print.tokaido.nihonbashi`, `audio.sfx.dice-roll`).
+   - Validated against JSON Schema (`assets/manifest/asset-schema.json`).
+   - Declares platform compatibility (`web`, `mobile`, `embedded`), loading strategy (`eager`, `lazy`, `deferred`), and historical metadata (`historicalStatus`, `license`, `attribution`).
+
+2. **Core Asset Subsystem (`assets/`)**:
+   - **`AssetManager` (`assets/asset-manager.js`)**: Universal API for resource querying, group preloading, sound playback, and lifecycle memory disposal.
+   - **`AssetRegistry` (`assets/manifest/asset-registry.js`)**: Indexing engine supporting fast Asset ID lookups and group prefix filtering.
+   - **`BrowserAssetAdapter` (`assets/adapters/browser-asset-adapter.js`)**: Platform adapter handling web image/audio fetch requests, CORS, and fallback object creation.
+
+3. **Validation & Audit Suite (`tools/validate_assets.mjs`)**:
+   - Structural validation, disk existence checks, Unix path case-sensitivity verification, and group reference integrity tests.
+   - Generates [`docs/ASSET_AUDIT_REPORT.md`](docs/ASSET_AUDIT_REPORT.md). Run via `npm run assets:validate` / `npm run assets:report`.
+
+---
+
+## 4. Verification Pipeline
 
 ```text
 python3 tools/verify_all.py --browser --port 8090
@@ -73,5 +93,6 @@ python3 tools/verify_all.py --browser --port 8090
 ├── node --check on every JS module       18 checks
 ├── C11 legacy prototype verification     static check (or 92 checks when gcc/cc is installed)
 ├── node tools/test_js_rules.mjs          66 deterministic unit, reachability & 1,000-match simulation tests
+├── npm run assets:validate               Automated asset schema, disk existence & case checks
 └── tools/test_browser_e2e.py             175 headless Chromium E2E checks
 ```

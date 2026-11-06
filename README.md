@@ -9,6 +9,9 @@
 - **歴史絵双六再設計仕様書**: [`docs/EDO_MEIJI_ESUGOROKU_GAMEPLAY_REDESIGN.md`](docs/EDO_MEIJI_ESUGOROKU_GAMEPLAY_REDESIGN.md)
 - **設計仕様書 (V1.1–V2.0)**: [`docs/GAME_DESIGN_SPEC_V1.1-V2.0.md`](docs/GAME_DESIGN_SPEC_V1.1-V2.0.md)
 - **品質監査記録**: [`docs/V1.1-V1.3_ENGINEERING_AUDIT.md`](docs/V1.1-V1.3_ENGINEERING_AUDIT.md)
+- **V2.1 模块化美术与音响资产系统**: [`docs/ASSET_SYSTEM_DESIGN.md`](docs/ASSET_SYSTEM_DESIGN.md)
+- **资产盘点清单**: [`docs/ASSET_INVENTORY.md`](docs/ASSET_INVENTORY.md)
+- **资产替换与扩展指南**: [`docs/ASSET_REPLACEMENT_GUIDE.md`](docs/ASSET_REPLACEMENT_GUIDE.md)
 - **C11 エンジン (`core/esugoroku.c`)**: 初期 17〜19 格プロトタイプ（Legacy Prototype）として保持
 - 実行環境: Node.js 18+ / モダンブラウザ（Three.js WebGL + Canvas 2D 浮世絵木版摺りシェーダー）
 - 既定ポート: **3000**（または環境変数 `PORT`）
@@ -65,10 +68,14 @@ python3 tools/verify_all.py --browser --port 8090
 
 ```bash
 # JS 全モジュール構文チェック
-for f in server.js tools/test_js_rules.mjs mobile/js/*.js; do node --check "$f"; done
+for f in server.js tools/test_js_rules.mjs mobile/js/*.js assets/*.js assets/*/*.js; do node --check "$f"; done
 
 # JS 規則単体テスト＋到達性検証＋1,000局歴史双六シミュレーション（66 tests）
 node tools/test_js_rules.mjs
+
+# V2.1 资产系统自动化校验与审计报告生成
+npm run assets:validate
+npm run assets:report
 
 # ヘッドレス Chromium E2E テスト（175 checks）
 python3 tools/test_browser_e2e.py --port 8090

@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Esugoroku Asset Manifest Schema",
+  "type": "object",
+  "required": ["schemaVersion", "generatedAt", "source", "assets", "groups"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "generatedAt": { "type": "string" },
+    "source": { "type": "string" },
+    "assets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["id", "type", "path", "group", "platforms"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["image", "audio", "model", "font", "effect", "programmatic"]
+          },
+          "path": { "type": "string" },
+          "group": { "type": "string" },
+          "platforms": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["web", "mobile", "embedded"] }
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "suffix": { "type": "string" },
+                "platform": { "type": "string" }
+              },
+              "required": ["suffix", "platform"]
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "description": { "type": "string" },
+              "historicalStatus": {
+                "type": "string",
+                "enum": ["original-source", "historical-reconstruction", "historical-adaptation", "ai-generated", "original-artwork", "placeholder"]
+              },
+              "license": { "type": "string" },
+              "attribution": { "type": "string" },
+              "source": { "type": "string" },
+              "sourceUrl": { "type": "string" },
+              "catalogId": { "type": "string" },
+              "author": { "type": "string" }
+            }
+          },
+          "hash": { "type": "string" },
+          "fallback": {
+            "type": "object"
+          },
+          "loadStrategy": {
+            "type": "string",
+            "enum": ["eager", "lazy", "deferred"]
+          },
+          "version": { "type": "string" }
+        }
+      }
+    },
+    "groups": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["description", "assets"],
+        "properties": {
+          "description": { "type": "string" },
+          "assets": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "preload": { "type": "boolean" },
+          "platforms": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

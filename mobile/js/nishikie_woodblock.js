@@ -1,4 +1,5 @@
 // Authentic Edo Nishiki-e (錦絵) & E-Sugoroku Woodblock Print Engine
+import AssetManager from '../../assets/asset-manager.js';
 // High-Clarity Wide-Aperture Edition:
 // - Uses large 260x240px..420x320px native crops from the 9 historical E-Sugoroku master sheets
 // - Slim double sumi keylines (二重匡郭) & compact vertical Tanzaku slips (短冊) so 90%+ of each tile shows pure Ukiyo-e art
@@ -38,6 +39,22 @@ export const MASTER_SHEETS = {
   genji_strips: '/assets/aistudio/v2-2ea7f57afdf0bf62b4d0d8854269efe9_r_cfd81106.jpg',
   genji_palace: '/assets/aistudio/v2-fd75dd6025dfca9de24f93b336657329_r_2483b494.jpg',
 };
+
+// Asset ID to MASTER_SHEETS key mapping
+export const MASTER_SHEET_KEY_MAP = {
+  'board.tokaido.background': 'tokaido_jinja',
+  'board.yokai.background': 'yokai_collage',
+  'board.kesshu.background': 'kesshu_tilted',
+  'board.genji.background': 'genji_palace',
+};
+
+export function getMasterSheetUrl(boardId) {
+  const assetId = `board.${boardId}.background`;
+  const url = AssetManager.getUrl(assetId);
+  if (url && !url.includes('fallback-image')) return url;
+  // Fallback to original path if AssetManager cannot resolve
+  return MASTER_SHEETS['tokaido_jinja']; // default fallback
+}
 
 const loadedImages = new Map();
 const loadCallbacks = new Set();

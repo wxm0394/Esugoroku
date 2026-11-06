@@ -1,4 +1,5 @@
 // Authentic Edo WebAudio Synthesizer & Ambient Shamisen/Koto BGM Engine:
+import AssetManager from '../../assets/asset-manager.js';
 // - Independent SFX Bus: Tactile hinoki wood clacks, bone dice on porcelain chawan, and taiko drums.
 // - Independent BGM Bus: Traditional Japanese Shamisen (三味線) & 13-String Koto (箏) procedural compositions
 //   tailored to each of the 4 Ukiyo-e volumes (Yo-sen, Miyako-bushi In-sen, Tsugaru Ritsu, Heian Hira-joshi).
