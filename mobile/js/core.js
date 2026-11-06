@@ -85,38 +85,64 @@ export const EVENT = Object.freeze({
 /* Fair Dice & Seeded Deterministic PRNG (V1.1 Section 2.1)            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Largest multiple of 6 in [0, 2^32):
+ * 2^32 = 4294967296 = 6 * 715827882 + 4 -> UNBIASED_U32_LIMIT = 4294967292.
+ * Any uint32 sample >= UNBIASED_U32_LIMIT is rejected so 1..6 have exact 1/6 probability.
+ */
+export const UNBIASED_U32_LIMIT = 4294967292;
+
+export function isUnbiasedDieSample(u32) {
+  const val = Number(u32) >>> 0;
+  return val < UNBIASED_U32_LIMIT;
+}
+
 export function nextRngState(stateWord) {
   let t = ((stateWord >>> 0) + 0x6d2b79f5) >>> 0;
   t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
   t ^= (t + Math.imul(t ^ (t >>> 7), t | 61)) >>> 0;
-  const floatVal = ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  return { nextState: t >>> 0, value: floatVal };
+  const uint32 = (t ^ (t >>> 14)) >>> 0;
+  const floatVal = uint32 / 4294967296;
+  return { nextState: t >>> 0, uint32, value: floatVal };
 }
 
 export function createSeededRng(seed = 0x12345678) {
   let state = (Number(seed) >>> 0) || 0x12345678;
-  const api = () => {
+  const nextU32 = () => {
     const step = nextRngState(state);
     state = step.nextState;
-    return step.value;
+    return step.uint32;
   };
+  const api = () => nextU32() / 4294967296;
+  api.nextUint32 = nextU32;
   api.nextFloat = api;
-  api.rollDie = () => 1 + Math.floor(api() * 6);
+  api.rollDie = () => {
+    for (let guard = 0; guard < 32; guard++) {
+      const u32 = nextU32();
+      if (u32 < UNBIASED_U32_LIMIT) {
+        return 1 + (u32 % 6);
+      }
+    }
+    return 1 + (nextU32() % 6);
+  };
   api.getState = () => state >>> 0;
   api.setState = s => { state = (Number(s) >>> 0) || 1; };
   return api;
 }
 
 /**
- * Uniform 1..6 die generator used identically by Human, AI, and Local 2P.
+ * Uniform 1..6 die generator with Rejection Sampling used identically by Human, AI, and Local 2P.
  * Supports:
  *   - `rollDie(rngFn)` where `rngFn()` returns [0, 1) or 1..6
  *   - `rollDie(seededRngObj)`
- *   - `rollDie(matchState)` which advances `matchState.rngState` deterministically
- *   - `rollDie()` using browser CSPRNG / Math.random
+ *   - `rollDie(matchState)` which advances `matchState.rngState` deterministically via rejection sampling
+ *   - `rollDie()` using browser CSPRNG with rejection sampling (`u32 < 4294967292`)
  */
 export function rollDie(rng = null) {
   if (typeof rng === 'function') {
+    if (typeof rng.rollDie === 'function') {
+      return rng.rollDie();
+    }
     const v = rng();
     if (Number.isInteger(v) && v >= 1 && v <= 6) return v;
     return 1 + Math.floor(Math.max(0, Math.min(0.9999999, Number(v) || 0)) * 6);
@@ -128,12 +154,25 @@ export function rollDie(rng = null) {
     return 1 + Math.floor(rng.nextFloat() * 6);
   }
   if (rng && typeof rng === 'object' && Number.isInteger(rng.rngState)) {
-    const step = nextRngState(rng.rngState);
-    rng.rngState = step.nextState;
-    return 1 + Math.floor(step.value * 6);
+    for (let guard = 0; guard < 32; guard++) {
+      const step = nextRngState(rng.rngState);
+      rng.rngState = step.nextState;
+      if (step.uint32 < UNBIASED_U32_LIMIT) {
+        return 1 + (step.uint32 % 6);
+      }
+    }
+    const fallback = nextRngState(rng.rngState);
+    rng.rngState = fallback.nextState;
+    return 1 + (fallback.uint32 % 6);
   }
   if (typeof globalThis !== 'undefined' && globalThis.crypto?.getRandomValues) {
     const buf = new Uint32Array(1);
+    for (let guard = 0; guard < 32; guard++) {
+      globalThis.crypto.getRandomValues(buf);
+      if (buf[0] < UNBIASED_U32_LIMIT) {
+        return 1 + (buf[0] % 6);
+      }
+    }
     globalThis.crypto.getRandomValues(buf);
     return 1 + (buf[0] % 6);
   }
@@ -1052,14 +1091,41 @@ export function applyCharm(board, state, charmId, options = {}) {
     return { ok: true, newRoll, state: next, events };
   }
 
+  if (charmId === 'purify') {
+    const clearedSkip = next.skip[player] | 0;
+    const clearedGrudge = next.boardState?.genji?.grudgeMarks?.[player] | 0;
+    if (clearedSkip <= 0 && clearedGrudge <= 0) {
+      return { ok: false, reason: 'nothing_to_purify', state: next, events: [] };
+    }
+    consumeCharm(next, player, ESR_CHARM.PURIFY);
+    next.skip[player] = 0;
+    if (next.boardState?.genji?.grudgeMarks) {
+      next.boardState.genji.grudgeMarks[player] = 0;
+    }
+    pushEvent(events, EVENT.CHARM, player, next.pos[player], next.pos[player], 0, {
+      charm: 'purify',
+      effect: 'active_cleanse',
+      clearedSkip,
+      clearedGrudge,
+    });
+    next.events = events;
+    return { ok: true, clearedSkip, clearedGrudge, state: next, events };
+  }
+
   if (charmId === 'waka_slip') {
     const summary = buildGenjiBranchSummary(board);
+    const route = options.route === 'evil' ? 'evil' : options.route === 'good' ? 'good' : null;
+    if (route) {
+      consumeCharm(next, player, ESR_CHARM.WAKA_SLIP);
+      next.boardState.genji.routeChoice[player] = route;
+    }
     pushEvent(events, EVENT.CHARM, player, next.pos[player], next.pos[player], 0, {
       charm: 'waka_slip',
+      route,
       summary,
     });
     next.events = events;
-    return { ok: true, summary, state: next, events };
+    return { ok: true, route, summary, state: next, events };
   }
 
   return { ok: false, reason: 'passive_charm', state: next, events: [] };
@@ -1204,6 +1270,12 @@ export function getLegalChoices(board, state) {
   }
   if (hasCharm(state, player, ESR_CHARM.WIND) && !state.windActive[player]) {
     actions.push({ type: 'charm', charmId: 'wind' });
+  }
+  if (
+    hasCharm(state, player, ESR_CHARM.PURIFY) &&
+    ((state.skip[player] | 0) > 0 || (state.boardState?.genji?.grudgeMarks?.[player] | 0) > 0)
+  ) {
+    actions.push({ type: 'charm', charmId: 'purify' });
   }
   if (board.id === 'genji' && state.pos[player] === 15 && !state.boardState.genji.routeChoice[player]) {
     actions.push(
@@ -1502,45 +1574,172 @@ export function expectedValue(board, state, player) {
   return total / 6;
 }
 
-function expectiminimaxRollValue(board, state, maximizingPlayer, depth = 1) {
+function expectiminimaxRollChance(board, state, maximizingPlayer, depth = 1) {
   if ((state.winner ?? -1) >= 0 || depth <= 0) {
     return evaluateState(board, state, maximizingPlayer);
   }
-  const mover = state.turn | 0;
   let sum = 0;
   for (let r = 1; r <= 6; r++) {
-    const res = applyRoll(board, state, r, { pauseOnChoice: false });
-    if ((res.state.winner ?? -1) >= 0 || depth === 1) {
+    const res = applyRoll(board, state, r, { pauseOnChoice: true });
+    if ((res.state.winner ?? -1) >= 0) {
+      sum += evaluateState(board, res.state, maximizingPlayer);
+    } else if (res.state.pendingChoice) {
+      // Resolve post-roll decision node (Max for AI, Min for Opponent)
+      sum += expectiminimaxSearch(board, res.state, maximizingPlayer, depth);
+    } else if (depth <= 1) {
       sum += evaluateState(board, res.state, maximizingPlayer);
     } else {
-      sum += expectiminimaxRollValue(board, res.state, maximizingPlayer, depth - 1);
+      sum += expectiminimaxSearch(board, res.state, maximizingPlayer, depth - 1);
     }
   }
-  void mover;
   return sum / 6;
 }
 
 /**
- * Selects a legal pre-roll tactical action or pending-choice decision for AI
- * without EVER inspecting or choosing future dice outcomes.
+ * Genuine finite-depth Expectiminimax search tree:
+ *  - Terminal node: returns `evaluateState(board, state, maximizingPlayer)`
+ *  - Pending Choice decision node (`kesshu_stance`, `genji_branch`, `tokaido_coin`):
+ *      Max over legal choices when `chooser === maximizingPlayer`,
+ *      Min over legal choices when `chooser !== maximizingPlayer`.
+ *  - Turn-Start decision node:
+ *      Evaluates pre-roll tactical actions (`roll`, `strike`, `charm: wind`, `charm: purify`)
+ *      followed by the 6-outcome uniform Chance node (`1/6` per die face),
+ *      taking Max for `maximizingPlayer` and Min for opponent.
  */
-export function aiSelectAction(board, state, difficulty = state?.aiDifficulty || 'normal') {
+export function expectiminimaxSearch(board, state, maximizingPlayer, depth = 2) {
+  if (!board || !state) return 0;
+  if ((state.winner ?? -1) >= 0 || depth <= 0) {
+    return evaluateState(board, state, maximizingPlayer);
+  }
+
+  // 1. Pending Choice Node (Max for maximizingPlayer, Min for opponent)
+  if (state.pendingChoice) {
+    const chooser = state.pendingChoice.player ?? state.turn ?? 0;
+    const isMax = chooser === maximizingPlayer;
+    const choices = getLegalChoices(board, state);
+    if (!choices.length) {
+      return evaluateState(board, state, maximizingPlayer);
+    }
+    let bestVal = isMax ? -Infinity : Infinity;
+    for (const choice of choices) {
+      const res = applyChoice(board, state, choice);
+      const nextDepth = Math.max(0, depth - 1);
+      const val = (res.state.winner ?? -1) >= 0 || nextDepth === 0
+        ? evaluateState(board, res.state, maximizingPlayer)
+        : expectiminimaxSearch(board, res.state, maximizingPlayer, nextDepth);
+      if (isMax) {
+        if (val > bestVal) bestVal = val;
+      } else {
+        if (val < bestVal) bestVal = val;
+      }
+    }
+    return Number.isFinite(bestVal) ? bestVal : evaluateState(board, state, maximizingPlayer);
+  }
+
+  // 2. Pre-roll Turn Decision Node + Chance Node
+  const mover = state.turn | 0;
+  const isMax = mover === maximizingPlayer;
+  let bestVal = expectiminimaxRollChance(board, state, maximizingPlayer, depth);
+
+  if (
+    hasCharm(state, mover, ESR_CHARM.PURIFY) &&
+    ((state.skip[mover] | 0) > 0 || (state.boardState?.genji?.grudgeMarks?.[mover] | 0) > 0)
+  ) {
+    const purified = applyCharm(board, state, 'purify', { player: mover });
+    if (purified.ok) {
+      const val = expectiminimaxRollChance(board, purified.state, maximizingPlayer, depth);
+      bestVal = isMax ? Math.max(bestVal, val) : Math.min(bestVal, val);
+    }
+  }
+
+  if (canUseTacticalStrike(board, state, mover).ok) {
+    const struck = applyTacticalStrike(board, state, mover);
+    if (struck.ok) {
+      const val = expectiminimaxRollChance(board, struck.state, maximizingPlayer, depth);
+      bestVal = isMax ? Math.max(bestVal, val) : Math.min(bestVal, val);
+    }
+  }
+
+  if (hasCharm(state, mover, ESR_CHARM.WIND) && !state.windActive[mover]) {
+    const winded = applyCharm(board, state, 'wind', { player: mover });
+    if (winded.ok) {
+      const val = expectiminimaxRollChance(board, winded.state, maximizingPlayer, depth);
+      bestVal = isMax ? Math.max(bestVal, val) : Math.min(bestVal, val);
+    }
+  }
+
+  return bestVal;
+}
+
+function expectiminimaxRollValue(board, state, maximizingPlayer, depth = 1) {
+  return expectiminimaxRollChance(board, state, maximizingPlayer, depth);
+}
+
+/**
+ * Selects a legal pre-roll tactical action, post-roll reroll, or pending-choice decision for AI
+ * without EVER inspecting or choosing future dice outcomes.
+ *
+ * Difficulty tiers:
+ *   - `easy`: random/conservative choices, minimal tactical intervention
+ *   - `normal`: 1-step greedy heuristic (distance, stay avoidance, basic resource awareness)
+ *   - `hard`: 1-ply Expectiminimax expectation over 1..6 + active tactical interference
+ *   - `master`: multi-ply Expectiminimax search (`depth = 2`) modeling Max/Min/Chance nodes
+ */
+export function aiSelectAction(board, state, difficulty = state?.aiDifficulty || 'normal', options = {}) {
   if (!board || !state || (state.winner ?? -1) >= 0) {
     return { type: 'roll' };
   }
   const ai = state.turn | 0;
   const opp = 1 - ai;
+  const searchDepth = difficulty === 'master' ? 2 : 1;
 
   // 1. Handle Pending Choice (Kesshu Combat Stance, Genji Branch, Tokaido Coin)
   if (state.pendingChoice) {
     const pc = state.pendingChoice;
+    const legal = getLegalChoices(board, state);
+
+    // Master & Hard use Expectiminimax tree evaluation across legal choices
+    if ((difficulty === 'master' || difficulty === 'hard') && legal.length > 0) {
+      let bestChoice = legal[0];
+      let bestScore = -Infinity;
+      for (const candidate of legal) {
+        const res = applyChoice(board, state, candidate);
+        let score = (res.state.winner ?? -1) >= 0
+          ? evaluateState(board, res.state, ai)
+          : expectiminimaxSearch(board, res.state, ai, searchDepth - 1);
+        // Domain-aware tie-breakers for tactical richness
+        if (pc.type === 'kesshu_stance') {
+          const myTok = popcount3(state.tokens[ai]);
+          const canSteal = ((state.tokens[opp] | 0) & ~(state.tokens[ai] | 0)) !== 0;
+          if (candidate.stance === 'assault' && canSteal) score += 18;
+          if (candidate.stance === 'defend' && myTok >= 3 && state.pos[ai] >= board.goal - 5) score += 16;
+          if (candidate.stance === 'feint' && !canSteal && myTok < 3) score += 6;
+        } else if (pc.type === 'genji_branch') {
+          const trailing = getNodeProgress(board, state.pos[opp]) - getNodeProgress(board, state.pos[ai]);
+          if (candidate.route === 'good' && trailing < 4) score += 5;
+          if (candidate.route === 'evil' && trailing >= 4) score += 9;
+        } else if (pc.type === 'tokaido_coin') {
+          const coins = state.boardState.tokaido.coins[ai] | 0;
+          if (candidate.spendCoin && (coins >= 2 || state.pos[ai] >= 12 || pc.subType === 'checkpoint')) {
+            score += 8;
+          }
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          bestChoice = candidate;
+        }
+      }
+      return bestChoice;
+    }
+
+    // Easy & Normal heuristic choices
     if (pc.type === 'kesshu_stance') {
-      const myTok = popcount3(state.tokens[ai]);
-      const oppTok = state.tokens[opp] | 0;
-      const canSteal = (oppTok & ~(state.tokens[ai] | 0)) !== 0;
       if (difficulty === 'easy') {
         return { type: 'kesshu_stance', stance: 'feint' };
       }
+      const myTok = popcount3(state.tokens[ai]);
+      const oppTok = state.tokens[opp] | 0;
+      const canSteal = (oppTok & ~(state.tokens[ai] | 0)) !== 0;
       if (myTok >= 3 && state.pos[ai] >= board.goal - 4) {
         return { type: 'kesshu_stance', stance: 'defend' };
       }
@@ -1554,7 +1753,6 @@ export function aiSelectAction(board, state, difficulty = state?.aiDifficulty ||
       if (difficulty === 'easy') {
         return { type: 'genji_branch', route: (state.ply % 2 === 0) ? 'good' : 'evil' };
       }
-      // If AI is trailing by >= 3 squares, evil route offers high-variance catchup; otherwise good route is safer
       const trailing = getNodeProgress(board, state.pos[opp]) - getNodeProgress(board, state.pos[ai]);
       return { type: 'genji_branch', route: trailing >= 4 ? 'evil' : 'good' };
     }
@@ -1574,25 +1772,72 @@ export function aiSelectAction(board, state, difficulty = state?.aiDifficulty ||
     }
   }
 
-  // 2. Pre-roll Genji branch selection if standing on #15
+  // 2. Optional Post-Roll Reroll Evaluation (when `options.rolledValue` is provided)
+  if (
+    Number.isInteger(options.rolledValue) &&
+    options.rolledValue >= 1 &&
+    options.rolledValue <= 6 &&
+    hasCharm(state, ai, ESR_CHARM.REROLL)
+  ) {
+    if (difficulty === 'easy') {
+      return { type: 'keep_roll', roll: options.rolledValue };
+    }
+    const rolledRes = applyRoll(board, state, options.rolledValue, { pauseOnChoice: false });
+    const currentVal = (rolledRes.state.winner ?? -1) >= 0
+      ? evaluateState(board, rolledRes.state, ai)
+      : (difficulty === 'master'
+        ? expectiminimaxSearch(board, rolledRes.state, ai, 1)
+        : evaluateState(board, rolledRes.state, ai));
+    const rerollExpectation = expectiminimaxRollChance(board, state, ai, searchDepth);
+    const threshold = difficulty === 'master' ? 5 : difficulty === 'hard' ? 8 : 14;
+    if (rerollExpectation > currentVal + threshold) {
+      return { type: 'charm', charmId: 'reroll' };
+    }
+    return { type: 'keep_roll', roll: options.rolledValue };
+  }
+
+  // 3. Pre-roll Purify Charm if skipping or cursed
+  if (
+    difficulty !== 'easy' &&
+    hasCharm(state, ai, ESR_CHARM.PURIFY) &&
+    ((state.skip[ai] | 0) > 0 || (state.boardState?.genji?.grudgeMarks?.[ai] | 0) > 0)
+  ) {
+    return { type: 'charm', charmId: 'purify' };
+  }
+
+  // 4. Pre-roll Genji branch selection if standing on #15
   if (board.id === 'genji' && state.pos[ai] === 15 && !state.boardState.genji.routeChoice[ai]) {
+    if (difficulty === 'master' || difficulty === 'hard') {
+      const goodRes = applyChoice(board, state, { type: 'genji_branch', route: 'good', completeTurn: false });
+      const evilRes = applyChoice(board, state, { type: 'genji_branch', route: 'evil', completeTurn: false });
+      const goodEv = expectiminimaxRollChance(board, goodRes.state, ai, searchDepth);
+      const evilEv = expectiminimaxRollChance(board, evilRes.state, ai, searchDepth);
+      const trailing = getNodeProgress(board, state.pos[opp]) - getNodeProgress(board, state.pos[ai]);
+      return { type: 'genji_branch', route: (evilEv + (trailing >= 4 ? 8 : 0) > goodEv) ? 'evil' : 'good' };
+    }
     const trailing = getNodeProgress(board, state.pos[opp]) - getNodeProgress(board, state.pos[ai]);
     return { type: 'genji_branch', route: trailing >= 4 ? 'evil' : 'good' };
   }
 
-  // 3. Pre-roll Tactical Strike / Wind Charm evaluation
-  const depth = difficulty === 'master' ? 2 : 1;
-  const baseEv = expectiminimaxRollValue(board, state, ai, depth);
+  // 5. Pre-roll Tactical Strike / Wind Charm evaluation
+  const baseEv = difficulty === 'master'
+    ? expectiminimaxRollChance(board, state, ai, 2)
+    : expectiminimaxRollChance(board, state, ai, 1);
 
   if (canUseTacticalStrike(board, state, ai).ok) {
     if (difficulty === 'easy') {
-      // Easy AI rarely uses strike unless opponent is right at the goal door
-      if (state.pos[opp] >= board.goal - 2) return { type: 'strike' };
+      if (state.pos[opp] >= board.goal - 1) return { type: 'strike' };
+    } else if (difficulty === 'normal') {
+      const lead = getNodeProgress(board, state.pos[opp]) - getNodeProgress(board, state.pos[ai]);
+      if (lead >= 4 || state.pos[opp] >= board.goal - 3) {
+        return { type: 'strike' };
+      }
     } else {
       const struck = applyTacticalStrike(board, state, ai);
       if (struck.ok) {
-        const strikeEv = expectiminimaxRollValue(board, struck.state, ai, depth);
-        if (strikeEv > baseEv + 2 || state.pos[opp] >= 8) {
+        const strikeEv = expectiminimaxRollChance(board, struck.state, ai, searchDepth);
+        const margin = difficulty === 'master' ? 1.5 : 3.0;
+        if (strikeEv > baseEv + margin || state.pos[opp] >= 8) {
           return { type: 'strike' };
         }
       }
@@ -1600,16 +1845,215 @@ export function aiSelectAction(board, state, difficulty = state?.aiDifficulty ||
   }
 
   if (difficulty !== 'easy' && hasCharm(state, ai, ESR_CHARM.WIND) && !state.windActive[ai]) {
-    const windRes = applyCharm(board, state, 'wind', { player: ai });
-    if (windRes.ok) {
-      const windEv = expectiminimaxRollValue(board, windRes.state, ai, depth);
-      if (windEv > baseEv + 4) {
+    if (difficulty === 'normal') {
+      const distToGoal = getNodeProgress(board, board.goal) - getNodeProgress(board, state.pos[ai]);
+      if (distToGoal <= 6 && distToGoal >= 3) {
         return { type: 'charm', charmId: 'wind' };
+      }
+    } else {
+      const windRes = applyCharm(board, state, 'wind', { player: ai });
+      if (windRes.ok) {
+        const windEv = expectiminimaxRollChance(board, windRes.state, ai, searchDepth);
+        const margin = difficulty === 'master' ? 0.5 : 2.0;
+        if (windEv > baseEv + margin) {
+          return { type: 'charm', charmId: 'wind' };
+        }
       }
     }
   }
 
   return { type: 'roll' };
+}
+
+/**
+ * Deterministic multi-seed AI vs Baseline simulation runner across volumes and difficulties.
+ * Returns structured metrics for win rates, average ply, resource collection, special triggers, and timeouts.
+ */
+export function runAiBatchSimulation(boards, options = {}) {
+  const boardList = Array.isArray(boards) ? boards : [boards];
+  const difficulties = options.difficulties || ['easy', 'normal', 'hard', 'master'];
+  const gamesPerCell = Math.max(1, Number(options.gamesPerDifficulty) || 12);
+  const opponentDifficulty = options.opponentDifficulty || 'easy';
+  const baseSeed = (Number(options.baseSeed) >>> 0) || 0x20260401;
+
+  const summaryByDifficulty = {};
+  const byBoard = {};
+
+  for (const diff of difficulties) {
+    summaryByDifficulty[diff] = {
+      difficulty: diff,
+      games: 0,
+      wins: 0,
+      losses: 0,
+      draws: 0,
+      winRate: 0,
+      avgPly: 0,
+      timeouts: 0,
+      specialTriggers: 0,
+      resourcesCollected: 0,
+    };
+  }
+
+  for (const board of boardList) {
+    if (!board || !board.id) continue;
+    byBoard[board.id] = {};
+    for (const diff of difficulties) {
+      let wins = 0;
+      let losses = 0;
+      let draws = 0;
+      let totalPly = 0;
+      let timeouts = 0;
+      let specialTriggers = 0;
+      let resourcesCollected = 0;
+
+      for (let g = 0; g < gamesPerCell; g++) {
+        const seed = (baseSeed + g * 7919 + board.id.charCodeAt(0) * 131) >>> 0;
+        let state = cloneState({
+          boardId: board.id,
+          pos: [board.start || 0, board.start || 0],
+          tokens: [0, 0],
+          skip: [0, 0],
+          turn: 0,
+          ply: 0,
+          turnCount: 0,
+          maxPly: board.maxTurns || 120,
+          winner: -1,
+          humanSide: 0,
+          mode: 'ai',
+          aiDifficulty: diff,
+          rngSeed: seed,
+          rngState: seed || 0x12345678,
+          charms: [
+            ESR_CHARM.STAY | ESR_CHARM.GUARD | ESR_CHARM.WIND | ESR_CHARM.REROLL | ESR_CHARM.PURIFY,
+            ESR_CHARM.STAY | ESR_CHARM.GUARD | ESR_CHARM.DASH,
+          ],
+          charmUsed: [0, 0],
+          charmLoadout: [['stay', 'guard', 'wind'], ['stay', 'guard', 'dash']],
+          charmCooldown: [{}, {}],
+          windActive: [false, false],
+          strikeCooldown: [0, 0],
+        });
+
+        let guard = 0;
+        const maxSteps = (board.maxTurns || 130) + 15;
+        while ((state.winner ?? -1) < 0 && guard < maxSteps) {
+          guard++;
+          const active = state.turn | 0;
+          const activeDiff = active === 0 ? diff : opponentDifficulty;
+
+          // Pre-roll action check
+          const preAction = aiSelectAction(board, state, activeDiff);
+          if (preAction.type === 'strike') {
+            const sr = applyTacticalStrike(board, state, active);
+            if (sr.ok) {
+              state = sr.state;
+              if (active === 0) specialTriggers++;
+            }
+          } else if (preAction.type === 'charm' && preAction.charmId) {
+            const cr = applyCharm(board, state, preAction.charmId, { player: active });
+            if (cr.ok) {
+              state = cr.state;
+              if (active === 0) specialTriggers++;
+            }
+          } else if (preAction.type === 'genji_branch') {
+            const br = applyChoice(board, state, preAction);
+            if (br.ok) {
+              state = br.state;
+              if (active === 0) specialTriggers++;
+            }
+          }
+
+          let roll = rollDie(state);
+          const rerollCheck = aiSelectAction(board, state, activeDiff, { rolledValue: roll });
+          if (rerollCheck.type === 'charm' && rerollCheck.charmId === 'reroll') {
+            const rr = applyCharm(board, state, 'reroll', { player: active, rng: state });
+            if (rr.ok && rr.newRoll) {
+              state = rr.state;
+              roll = rr.newRoll;
+              if (active === 0) specialTriggers++;
+            }
+          }
+
+          const res = applyRoll(board, state, roll, { pauseOnChoice: true });
+          state = res.state;
+
+          if (state.pendingChoice && (state.winner ?? -1) < 0) {
+            const choicePlayer = state.pendingChoice.player ?? state.turn ?? active;
+            const choiceDiff = choicePlayer === 0 ? diff : opponentDifficulty;
+            const decision = aiSelectAction(board, state, choiceDiff);
+            const cRes = applyChoice(board, state, decision);
+            state = cRes.state;
+            if (
+              choicePlayer === 0 &&
+              (decision.spendCoin === true || decision.stance === 'assault' || decision.stance === 'defend')
+            ) {
+              specialTriggers++;
+            }
+          }
+        }
+
+        if ((state.winner ?? -1) < 0) {
+          state = resolveMaxPlySettlement(board, state).state;
+        }
+
+        totalPly += state.ply || 0;
+        if (state.resultReason === 'max_ply' || state.winReason === 'max_ply_settlement') timeouts++;
+        if (state.winner === 0) wins++;
+        else if (state.winner === 1) losses++;
+        else draws++;
+
+        if (board.id === 'tokaido') {
+          resourcesCollected += popcountMask(state.boardState.tokaido.gourmetMask[0]);
+        } else if (board.id === 'yokai') {
+          resourcesCollected += popcountMask(state.boardState.yokai.lanternMask[0]);
+        } else if (board.id === 'kesshu') {
+          resourcesCollected += popcount3(state.tokens[0]);
+        } else if (board.id === 'genji') {
+          resourcesCollected += Math.abs(state.boardState.genji.balance[0] || 0);
+        }
+      }
+
+      const cellStats = {
+        boardId: board.id,
+        difficulty: diff,
+        games: gamesPerCell,
+        wins,
+        losses,
+        draws,
+        winRate: Number((wins / gamesPerCell).toFixed(3)),
+        avgPly: Number((totalPly / gamesPerCell).toFixed(1)),
+        timeouts,
+        specialTriggers,
+        resourcesCollected,
+      };
+      byBoard[board.id][diff] = cellStats;
+
+      const agg = summaryByDifficulty[diff];
+      agg.games += gamesPerCell;
+      agg.wins += wins;
+      agg.losses += losses;
+      agg.draws += draws;
+      agg.avgPly += totalPly;
+      agg.timeouts += timeouts;
+      agg.specialTriggers += specialTriggers;
+      agg.resourcesCollected += resourcesCollected;
+    }
+  }
+
+  for (const diff of difficulties) {
+    const agg = summaryByDifficulty[diff];
+    if (agg.games > 0) {
+      agg.winRate = Number((agg.wins / agg.games).toFixed(3));
+      agg.avgPly = Number((agg.avgPly / agg.games).toFixed(1));
+    }
+  }
+
+  return {
+    gamesPerDifficulty: gamesPerCell,
+    opponentDifficulty,
+    summaryByDifficulty,
+    byBoard,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -1714,6 +2158,8 @@ export const EsugorokuCore = Object.freeze({
   ESR_STYLE,
   ESR_CHARM,
   EVENT,
+  UNBIASED_U32_LIMIT,
+  isUnbiasedDieSample,
   createSeededRng,
   rollDie,
   cloneState,
@@ -1728,7 +2174,9 @@ export const EsugorokuCore = Object.freeze({
   previewOutcomes,
   evaluateState,
   expectedValue,
+  expectiminimaxSearch,
   aiSelectAction,
+  runAiBatchSimulation,
   resolveMaxPlySettlement,
   getNodeProgress,
   buildGenjiBranchSummary,

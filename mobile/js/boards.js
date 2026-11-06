@@ -495,7 +495,7 @@ const genjiOuterNodes = GENJI_OUTER.map((row, i) => {
     jumpTable: isJump ? [2, 2, 2, 2, 2, 2] : isTrap ? [-2, -2, -2, -2, -2, -2] : [0, 0, 0, 0, 0, 0],
     tokens: 0,
     rule: i === 15
-      ? '善悪の分かれ道 ─ 偶数は善道、奇数は悪道へ分岐'
+      ? '善悪の分かれ道 ─ 雅道（善道）か修羅道（悪道）かを主動選択（非対話時は偶奇分岐）'
       : isStay
         ? `泊 ─ ${title}の宿で一休み`
         : isJump
@@ -593,7 +593,7 @@ for (let i = 0; i < 15; i++) {
   genjiNodes[i].prev = i > 0 ? i - 1 : -1;
 }
 genjiNodes[15].prev = 14;
-genjiNodes[15].next = [16, 21]; // Even -> #16 (Good), Odd -> #21 (Evil)
+genjiNodes[15].next = [16, 21]; // Active choice: #16 (Good/雅道) or #21 (Evil/修羅道); non-interactive fallback: Even -> #16, Odd -> #21
 
 // Good track #16..#20 -> #26
 for (let i = 16; i <= 20; i++) {
@@ -630,7 +630,7 @@ const genji = {
   nodes: genjiNodes,
   cardIds: ['genji_01', 'genji_02', 'genji_03', 'genji_04', 'genji_05', 'genji_06', 'genji_07', 'genji_08', 'genji_09'],
   blurb: '外周十六帖と善悪五帖ずつ計二十七格の王朝長編双六。物怪の引き戻しや慢心の試練、追突合戦を経て源氏絵合の上りを目指す。',
-  ruleSummary: '関屋（#15）で偶なら善道五帖、奇なら悪道五帖へ分岐。道中の物怪や野分の嵐、同格追突（2格弾き）で激しい攻防が続く！',
+  ruleSummary: '関屋（#15）で雅道（善道五帖・安定）か修羅道（悪道五帖・奇襲）かを主動選択（非対話時は偶奇分岐）。道中の物怪や野分の嵐、同格追突（2格弾き）で激しい攻防が続く！',
   layout: 'four-color-split-tracks',
   shape: 'vertical-strip',
   ui: {

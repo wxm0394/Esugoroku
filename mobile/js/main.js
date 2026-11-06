@@ -2085,6 +2085,7 @@ function snapshot() {
     winner: G.match?.winner ?? -1,
     resultReason: G.match?.resultReason ?? null,
     pendingChoice: G.match?.pendingChoice ? { ...G.match.pendingChoice } : null,
+    events: Array.isArray(G.match?.events) ? [...G.match.events] : [],
     boardState: G.match?.boardState ? JSON.parse(JSON.stringify(G.match.boardState)) : null,
     aiDifficulty: G.aiDifficulty,
     mode: G.mode,
@@ -2201,7 +2202,7 @@ window.__ESR__ = {
     handleEvents(result, rollVal);
     if (G.phase === 'ROLL' && prevTurn !== G.match.turn) {
       triggerTurnPageTurn(prevTurn, G.match.turn);
-      G.aiTimer = 0;
+      G.aiTimer = isSideControlledByHuman(G.match.turn) ? 0 : 0.85;
     }
     syncHudDOM();
     return snapshot();

@@ -818,7 +818,168 @@ test('audio.woodTileClack is an alias of tileClack and respects SFX mute state',
   assert.equal(unmuted.vol, 0.20);
 });
 
+group('V1.1–V1.3 Engineering Audit: Unbiased Rejection Sampling & 12-Charm Completeness');
+test('UNBIASED_U32_LIMIT rejects modulo-biased tail [4294967292..4294967295] and 60,000 rolls are uniform across 1..6', () => {
+  assert.equal(EsugorokuCore.UNBIASED_U32_LIMIT, 4294967292);
+  assert.equal(EsugorokuCore.UNBIASED_U32_LIMIT % 6, 0);
+  assert.equal(EsugorokuCore.isUnbiasedDieSample(4294967291), true);
+  assert.equal(EsugorokuCore.isUnbiasedDieSample(4294967292), false);
+  assert.equal(EsugorokuCore.isUnbiasedDieSample(4294967295), false);
+
+  const rng = createSeededRng(0x9e3779b9);
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  const N = 60000;
+  for (let i = 0; i < N; i++) {
+    const face = rollDie(rng);
+    assert.ok(face >= 1 && face <= 6);
+    counts[face]++;
+  }
+  for (let face = 1; face <= 6; face++) {
+    const dev = Math.abs(counts[face] - 10000) / 10000;
+    assert.ok(dev < 0.035, `Face ${face} count ${counts[face]} deviated by ${(dev * 100).toFixed(2)}%`);
+  }
+});
+
+test('Tokaido has exactly 3 gourmet stations (#2, #7, #12) and #16 is a pure forward jump (+2)', () => {
+  const tokaido = getBoard(0);
+  const gourmetIds = tokaido.nodes.filter(n => (n.gourmetBit | 0) > 0).map(n => n.id);
+  assert.deepEqual(gourmetIds, [2, 7, 12]);
+  assert.equal(tokaido.nodes[16].gourmetBit || 0, 0);
+
+  const state = stateFor(0);
+  state.pos[0] = 15;
+  state.turn = 0;
+  const res = applyNext(tokaido, state, 1);
+  assert.equal(res.state.pos[0], 18, 'Landing on #16 jumps +2 to #18');
+  assert.equal(res.state.boardState.tokaido.gourmetMask[0], 0, '#16 must not award gourmet bit');
+  assert.equal(res.state.boardState.tokaido.coins[0], 0, '#16 must not award travel coin');
+});
+
+test('purify charm supports both active pre-roll cleansing (skip/grudge) and passive landing protection', () => {
+  const genji = getBoard(3);
+  const state = stateFor(3, { charms: ['purify', 'waka_slip', 'counter'] });
+  state.skip[0] = 2;
+  state.boardState.genji.grudgeMarks[0] = 1;
+
+  // Active pre-roll purify cleanses skip and grudgeMarks
+  const activeRes = EsugorokuCore.applyCharm(genji, state, 'purify', { player: 0 });
+  assert.equal(activeRes.ok, true);
+  assert.equal(activeRes.state.skip[0], 0);
+  assert.equal(activeRes.state.boardState.genji.grudgeMarks[0], 0);
+  assert.ok(activeRes.state.charmUsed[0] & ESR_CHARM.PURIFY);
+
+  // Waka slip can preset route choice and return branch risk summary
+  const wakaRes = EsugorokuCore.applyCharm(genji, state, 'waka_slip', { player: 0, route: 'good' });
+  assert.equal(wakaRes.ok, true);
+  assert.equal(wakaRes.state.boardState.genji.routeChoice[0], 'good');
+  assert.ok(wakaRes.summary && wakaRes.summary.good && wakaRes.summary.evil);
+
+  // Counter charm pushes attacker back 1 square on same-square clash
+  const tokaido = getBoard(0);
+  const counterState = stateFor(0, { charmsP1: ['counter'] });
+  counterState.pos[0] = 4;
+  counterState.pos[1] = 5;
+  counterState.turn = 0;
+  const clashRes = applyNext(tokaido, counterState, 1);
+  assert.equal(clashRes.state.pos[0], 4, 'Attacker is pushed back 1 square by defender counter charm');
+  assert.ok(clashRes.state.charmUsed[1] & ESR_CHARM.COUNTER);
+});
+
+group('V1.1–V1.3 True Expectiminimax Search & 4-Tier AI Verification');
+test('expectiminimaxSearch evaluates Max nodes, Min nodes, and 1..6 Chance nodes without mutating input state', () => {
+  const kesshu = getBoard(2);
+  const state = stateFor(2, { charms: ['wind', 'stay', 'guard'], charmsP1: ['wind', 'stay', 'guard'] });
+  state.pos[0] = 9;
+  state.pos[1] = 10;
+  state.tokens[0] = 1;
+  state.tokens[1] = 2;
+  state.turn = 0;
+  const snapshotBefore = JSON.stringify(state);
+
+  const depth1Val = EsugorokuCore.expectiminimaxSearch(kesshu, state, 0, 1);
+  const depth2Val = EsugorokuCore.expectiminimaxSearch(kesshu, state, 0, 2);
+  assert.ok(Number.isFinite(depth1Val));
+  assert.ok(Number.isFinite(depth2Val));
+  assert.equal(JSON.stringify(state), snapshotBefore, 'expectiminimaxSearch must never mutate input state or RNG');
+
+  // Verify Max vs Min pendingChoice node symmetry
+  const paused = applyNext(kesshu, state, 1, { pauseOnChoice: true });
+  assert.equal(paused.state.pendingChoice?.type, 'kesshu_stance');
+  const maxValForP0 = EsugorokuCore.expectiminimaxSearch(kesshu, paused.state, 0, 1);
+  const minValForP1 = EsugorokuCore.expectiminimaxSearch(kesshu, paused.state, 1, 1);
+  assert.ok(Number.isFinite(maxValForP0) && Number.isFinite(minValForP1));
+  assert.ok(maxValForP0 > 0, 'Attacker (Max node) gains positive value from stealing missing token');
+  assert.ok(minValForP1 < 0, 'Defender (Min node perspective) sees negative value when attacker steals token');
+});
+
+test('easy, normal, hard, and master AI tiers exhibit distinct tactical decisions on identical board states', () => {
+  const kesshu = getBoard(2);
+  const state = stateFor(2, { charmsP1: ['wind', 'reroll', 'purify'] });
+  state.turn = 1;
+  state.pos[0] = 14;
+  state.pos[1] = 8;
+  state.tokens[0] = 3;
+  state.tokens[1] = 1;
+
+  // 1. Pre-roll strike when opponent leads by 6 squares (at #14 vs #8, not at goal-1):
+  // Easy does not strike at #14, whereas Normal/Hard/Master strike
+  const easyPre = EsugorokuCore.aiSelectAction(kesshu, state, 'easy');
+  const masterPre = EsugorokuCore.aiSelectAction(kesshu, state, 'master');
+  assert.equal(easyPre.type, 'roll');
+  assert.equal(masterPre.type, 'strike');
+
+  // 2. Kesshu stance choice when AI can steal a missing regalia token:
+  // Easy chooses 'feint', whereas Normal/Hard/Master choose 'assault'
+  const clashState = EsugorokuCore.cloneState(state);
+  clashState.pendingChoice = { type: 'kesshu_stance', player: 1, pos: 14, roll: 2 };
+  assert.equal(EsugorokuCore.aiSelectAction(kesshu, clashState, 'easy').stance, 'feint');
+  assert.equal(EsugorokuCore.aiSelectAction(kesshu, clashState, 'master').stance, 'assault');
+
+  // 3. Tokaido coin choice at checkpoint pullback:
+  // Easy accepts penalty, whereas Normal/Hard/Master spend coin
+  const tokaido = getBoard(0);
+  const coinState = stateFor(0);
+  coinState.turn = 1;
+  coinState.pos[1] = 13;
+  coinState.boardState.tokaido.coins[1] = 2;
+  coinState.pendingChoice = { type: 'tokaido_coin', subType: 'checkpoint', reason: 'checkpoint', player: 1, pos: 13, roll: 2, jump: -2 };
+  assert.equal(EsugorokuCore.aiSelectAction(tokaido, coinState, 'easy').spendCoin, false);
+  assert.equal(EsugorokuCore.aiSelectAction(tokaido, coinState, 'master').spendCoin, true);
+});
+
+test('runAiBatchSimulation completes deterministically across all 4 volumes and 4 AI difficulties with zero hangs', () => {
+  const simA = EsugorokuCore.runAiBatchSimulation(BOARDS, {
+    gamesPerDifficulty: 8,
+    opponentDifficulty: 'easy',
+    baseSeed: 0x20260501,
+  });
+  const simB = EsugorokuCore.runAiBatchSimulation(BOARDS, {
+    gamesPerDifficulty: 8,
+    opponentDifficulty: 'easy',
+    baseSeed: 0x20260501,
+  });
+
+  // Identical seeds produce bit-for-bit identical batch statistics
+  assert.deepEqual(simA, simB);
+
+  for (const diff of ['easy', 'normal', 'hard', 'master']) {
+    const agg = simA.summaryByDifficulty[diff];
+    assert.equal(agg.games, 32, `Expected 32 total games for ${diff} across 4 boards`);
+    assert.equal(agg.wins + agg.losses + agg.draws, 32);
+    assert.ok(agg.avgPly > 5 && agg.avgPly <= 150, `Invalid avgPly ${agg.avgPly} for ${diff}`);
+  }
+  assert.ok(
+    simA.summaryByDifficulty.master.winRate >= simA.summaryByDifficulty.easy.winRate,
+    `Master winRate (${simA.summaryByDifficulty.master.winRate}) should be >= Easy winRate (${simA.summaryByDifficulty.easy.winRate})`,
+  );
+  assert.ok(
+    simA.summaryByDifficulty.master.specialTriggers > simA.summaryByDifficulty.easy.specialTriggers,
+    'Master AI actively triggers more tactical choices/charms/strikes than Easy AI',
+  );
+});
+
 console.log(`\n${passed} tests passed, ${failures.length} failed.`);
 if (failures.length) {
   process.exit(1);
 }
+

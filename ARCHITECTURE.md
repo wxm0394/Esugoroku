@@ -1,77 +1,58 @@
 # E-Sugoroku Architecture (V1.1–V1.3)
 
-## 1. Design goals & Canonical Rules Authority
+## 1. Design Goals & Canonical Rules Authority
 
-E-Sugoroku is a standalone browser tabletop board game built around four
-deliberately different ukiyo-e volumes. See
-[`docs/GAME_DESIGN_SPEC_V1.1-V2.0.md`](docs/GAME_DESIGN_SPEC_V1.1-V2.0.md) for
-the full V1.1–V2.0 game design specification.
+E-Sugoroku is a browser tabletop board game built around four distinct ukiyo-e volumes. See [`docs/GAME_DESIGN_SPEC_V1.1-V2.0.md`](docs/GAME_DESIGN_SPEC_V1.1-V2.0.md) for the authoritative V1.1–V2.0 game design specification and [`docs/V1.1-V1.3_ENGINEERING_AUDIT.md`](docs/V1.1-V1.3_ENGINEERING_AUDIT.md) for the engineering audit record.
 
-1. **Four genuinely different boards & volume mechanics** — not one grid with
-   four palettes:
-   - Vol. 1 Tokaido (25 nodes): Gourmet stations (`#2, #7, #12`) & Travel Coins (`旅銭`) to bypass stays/checkpoints.
-   - Vol. 2 Yokai (25 nodes): 4 explicit Ao-Andon lantern nodes (`#4, #10, #16, #22`) & personal Hyakki Yagyo (`×2`/`×3` forward jump multiplier).
-   - Vol. 3 Kesshu (24 nodes): 3 regalia tokens (`兜・太刀・陣太鼓`) & 3 clash combat stances (`猛攻・牽制・固守`).
-   - Vol. 4 Genji (27 nodes): Active route choice at `#15 関屋` (`雅道` good vs `修羅道` evil) & moral balance (`balance`).
-2. **Single Authoritative Browser Rules Engine** — `mobile/js/core.js` +
-   `mobile/js/boards.js` are the sole canonical source of truth for board
-   graphs, 12 charms, fair 1–6 dice (`rollDie`), volume state (`boardState`),
-   and AI tactical heuristics (`aiSelectAction`). `core/esugoroku.c` is retained
-   only as the legacy 17-node C11 prototype.
-3. **Fair Dice & Legal AI Decisions** — both Human and AI roll from the exact
-   same uniform 1–6 generator (`createSeededRng` / `rollDie`). AI never selects
-   dice faces; difficulty levels (`easy`, `normal`, `hard`, `master`) differ
-   solely in how AI evaluates legal pre-roll and pending-choice actions.
-4. **Offline operation & deterministic tests** — no external runtime API calls;
-   `window.__ESR__` and `tools/test_js_rules.mjs` drive the exact same pure
-   rules engine used by the UI.
+1. **Four genuinely different boards & volume mechanics** — not one grid with four palettes:
+   - **Vol. 1 Tokaido (`tokaido`, 25 nodes, goal `#24`)**: 3 gourmet stations (`#2 泥鰌鍋`, `#7 稲荷寿司`, `#12 宇治茶`) & Travel Coins (`旅銭`) to bypass stays (`泊`) and checkpoint pullbacks (`関所`). Node `#16` (`桑名七里渡`) is a `+2` forward jump (`jumpTable`), not a gourmet station.
+   - **Vol. 2 Yokai (`yokai`, 25 nodes, goal `#24`)**: 4 explicit Ao-Andon lantern nodes (`#4, #10, #16, #22`) tracked per player (`lanternMask`), triggering a personal Hyakki Yagyo (`×2` forward jump multiplier, or `×3` with `andon_ward`) on the player's next forward jump.
+   - **Vol. 3 Kesshu (`kesshu`, 24 nodes, goal `#23`)**: 3 regalia tokens (`兜=1, 太刀=2, 陣太鼓=4`, required `mask = 7`) required to unlock `#23`, plus 3 interactive combat stances (`assault 猛攻`, `feint 牽制`, `defend 固守`) on same-square clashes.
+   - **Vol. 4 Genji (`genji`, 27 nodes, goal `#26`)**: Active route choice at `#15 関屋` between the golden `good` track (`雅道 #16..#20`) and the purple `evil` track (`修羅道 #21..#25`), with roll parity (`even -> good`, `odd -> evil`) retained only as a non-interactive fallback when `pauseOnChoice` is false and no `routeChoice` is preset.
+2. **Single Authoritative Browser Rules Engine** — `mobile/js/core.js` + `mobile/js/boards.js` are the sole canonical source of truth for board graphs, 12 charms, fair 1–6 dice (`rollDie`), volume state (`boardState`), and AI decision search (`aiSelectAction` / `expectiminimaxSearch`). `core/esugoroku.c` is retained strictly as a 17–19 node C11 Legacy Prototype.
+3. **Unbiased Fair Dice & True Expectiminimax AI** — both Human and AI roll from the exact same rejection-sampled 1–6 generator (`createSeededRng` / `rollDie` with `UNBIASED_U32_LIMIT = 4294967292`, eliminating `2^32 % 6` modulo bias). AI never selects or alters dice faces; difficulty levels (`easy`, `normal`, `hard`, `master`) differ solely in legal pre-roll, post-roll (`reroll`), and pending-choice decision evaluation.
+4. **Deterministic Verification Surface** — `window.__ESR__` and `tools/test_js_rules.mjs` drive the exact same pure rules engine used by the UI.
 
 ```text
-      ┌─────────────────────────────────────────────────────┐
-      │ mobile/js/boards.js                                 │
-      │ 4 node graphs (25/25/24/27) · 36 cards · 12 charms  │
-      └──────────────────────────┬──────────────────────────┘
-                                 │
-      ┌──────────────────────────▼──────────────────────────┐
-      │ mobile/js/core.js (Canonical Rules Engine)          │
-      │ Fair RNG · 4 volume mechanics · 12 charms · EV AI   │
-      └───────────────┬───────────────────────┬─────────────┘
-                      │                       │
-        ┌─────────────▼────────────┐  ┌───────▼─────────────┐
-        │ tabletop_3d.js           │  │ main.js + state.js  │
-        │ Three.js + Ukiyo-e pass  │  │ HUD · choices · v2  │
-        └──────────────────────────┘  └─────────────────────┘
+      ┌──────────────────────────────────────────────────────────┐
+      │ mobile/js/boards.js                                      │
+      │ 4 node graphs (25/25/24/27) · 36 cards · 12 charms       │
+      └────────────────────────────┬─────────────────────────────┘
+                                   │
+      ┌────────────────────────────▼─────────────────────────────┐
+      │ mobile/js/core.js (Canonical Rules Engine)               │
+      │ Unbiased RNG · 4 volume mechanics · Expectiminimax AI    │
+      └────────────────┬───────────────────────────┬─────────────┘
+                       │                           │
+         ┌─────────────▼────────────┐  ┌───────────▼─────────────┐
+         │ tabletop_3d.js           │  │ main.js + state.js      │
+         │ Three.js + Ukiyo-e pass  │  │ HUD · choices · v1->v2  │
+         └──────────────────────────┘  └─────────────────────────┘
 ```
 
-## 2. Stage and coordinate model
+---
 
-The browser canvas is sized to the viewport at up to 2× DPR.  All game layout
-is authored in a virtual **1280 × 800** stage and centred with a uniform scale.
+## 2. Stage and Coordinate Model
 
-```text
-stage 1280 × 800
-┌────────────────────────────────────────────────────────────┐
-│ header                                                     │
-│ ┌──────────┬──────────────────────────────┬──────────────┐ │
-│ │ left     │ board surface                │ right tray   │ │
-│ │ panel    │ 800 × 640 local coordinates  │ 264 wide     │ │
-│ │ 166 wide │ BOARD_RECT {190,68,800,660}  │              │ │
-│ └──────────┴──────────────────────────────┴──────────────┘ │
-└────────────────────────────────────────────────────────────┘
-```
+The browser canvas is sized to the viewport at up to 2× DPR. All 2D board and overlay layout is authored in a virtual **1280 × 800** stage and centered with a uniform scale:
 
 - `W = 1280`, `H = 800`
 - `LEFT_PANEL = { x: 14, y: 68, w: 166, h: 664 }`
-- `BOARD_SURFACE = { x: 196, y: 92, w: 788, h: 640 }`
-- `RIGHT_PANEL = { x: 1002, y: 68, w: 264, h: 664 }`
+- `BOARD_SURFACE = { x: 190, y: 78, w: 800, h: 640 }`
+- `RIGHT_PANEL = { x: 1000, y: 68, w: 266, h: 664 }`
 - `DICE_TRAY = { x: 1014, y: 432, w: 240, h: 250 }`
-- `TUBE_RECT = { x: 1038, y: 542, w: 98, h: 108 }`
-- Board-local cards use **800 × 640** coordinates.
+- Board-local node rectangles use **800 × 640** coordinates (`0 <= x, y`, `x + w <= 800`, `y + h <= 640`).
 
-`resize()` computes `scale`, `offsetX`, `offsetY`; `toStageXY()` and
-`toClientXY()` perform the inverse mapping for pointer input and overlays.
+---
 
-## 3. Board data model
+## 3. Canonical Board Geometry & Data Model
+
+| Volume | Board ID | Node Count | Start ID | Goal ID | Style | Key Nodes & Tactical Data |
+|---|---|---:|---:|---:|---|---|
+| Vol. 1 東海道 | `tokaido` | **25** | `0` | `24` | `mawari` | Outer 16 stations (`#0..#15`) + inner 8 stations (`#16..#23`) + center goal `#24`. Gourmet stations: `#2, #7, #12` (`gourmetBit = 1, 2, 4`). Exact-landing bounce at `#24`. |
+| Vol. 2 百種怪談 | `yokai` | **25** | `0` | `24` | `tobi` | Irregular collage (`#0..#24`), 6-face jump lookup tables (`jumpTable`), 4 Ao-Andon lantern nodes (`#4, #10, #16, #22`, `lanternBit = 1, 2, 4, 8`). |
+| Vol. 3 英勇揃 | `kesshu` | **24** | `0` | `23` | `kesshu` | Tilted karuta battlefield (`#0..#23`), 3 regalia tokens (`#4 兜=1`, `#11 太刀=2`, `#18 陣太鼓=4`, `requiredTokens = 3`), 3 clash stances (`assault`, `feint`, `defend`). |
+| Vol. 4 源氏繪合 | `genji` | **27** | `0` | `26` | `wakare` | Outer 16 chapters (`#0..#15`), branch at `#15 関屋` into 5 `good` nodes (`#16..#20`) and 5 `evil` nodes (`#21..#25`), converging at `#26 六条院大上り`. |
 
 Each volume exports a `Board` object from `mobile/js/boards.js`:
 
@@ -79,8 +60,8 @@ Each volume exports a `Board` object from `mobile/js/boards.js`:
 {
   id, volume, style, styleLabel, title, shortTitle,
   start, goal, bounceBack, requiredTokens, maxTurns,
-  nodes,                    // ordered directed graph
-  cardIds,                  // nine gallery cards
+  nodes,                    // ordered directed graph (25, 25, 24, 27 nodes)
+  cardIds,                  // 9 gallery cards per volume (36 total)
   layout, shape,            // renderer contracts
   ui: {
     skin, panelTitle, panelSub,
@@ -89,253 +70,79 @@ Each volume exports a `Board` object from `mobile/js/boards.js`:
 }
 ```
 
-A node is:
+---
 
-```js
-{
-  id, title, reading, art, kind,
-  x, y, w, h,               // 800 × 640 local geometry
-  next: [id] | [good, evil],
-  prev,
-  jumpTable: [six relative jumps],
-  stayTurns,
-  tokens,                   // bit mask
-  stripColor, tilt, komae, palette,
-  rule, tokenLabel
-}
-```
+## 4. Canonical Rules Engine (`mobile/js/core.js`)
 
-Node kinds: `start`, `normal`, `jump`, `stay`, `token`, `branch`, `good`,
-`evil`, `goal`.
+### 4.1 Unbiased 1–6 RNG & Rejection Sampling
 
-### Volume-specific geometry
+`createSeededRng(seed)` and `rollDie(rngOrState)` use Mulberry32 32-bit state transitions with rejection sampling:
 
-**巻ノ壱 東海道 — spiral corridor**  
-Sixteen cards use a 5×5 ring (`RING_FROM_TOP_LEFT`); the central goal occupies
-the full 3×3 interior, so the corridor visibly spirals inward.  Each card is an
-arrow-strip shape with a right-hand vertical title slip and a red `泊`/`飛`
-seal.  Overshoot bounces.
+- `UNBIASED_U32_LIMIT = 4294967292` (`Math.floor(0x100000000 / 6) * 6`, leaving `4` tail values `4294967292..4294967295` rejected).
+- Any 32-bit sample `>= UNBIASED_U32_LIMIT` is rejected and re-sampled so every die face `1..6` has an exact mathematical probability of `1/6`.
 
-**巻ノ弐 百種怪談 — irregular collage**  
-Cards are hand-placed with mixed sizes; the start card is 190×146 and several
-normal cards are ~136×96, giving an intentional 1.4–1.6× size rhythm.  Each
-monster card carries a red vertical lookup slip with six rows (`①→X … ⑥→Y`).
-The start card's jump table is exposed to the renderer, which draws translucent
-Bézier previews for all six die faces.
+### 4.2 Nine-Step Single-Ply Resolution Pipeline
 
-**巻ノ参 英勇揃伊呂波双六 — tilted warrior cards**  
-Fifteen cards are scattered like a hand of karuta; `tilt` ranges from about
--7° to +9°.  The bottom-right `出陣` and top-left `上り` are oversized army
-cards.  Every card has a yellow `いろは` roundel in its top-left.  Three token
-nodes supply the regalia mask (`兜=1`, `太刀=2`, `陣太鼓=4`).
+1. **Cooldown Tick & Recharge**: Decrement `strikeCooldown` and `charmCooldown`; recharge eligible 4/5-turn charms when cooldown reaches `0`.
+2. **Skip Check**: If `skip[player] > 0`, decrement `skip`, emit `skip`, and pass turn.
+3. **Pre-Move Modifiers**: Apply active `wind` charm (`+2` steps) or passive `dash` charm (`+1` step, mutually exclusive on the same turn), plus `first_roll` card buff (`+1..+2` steps, capped).
+4. **Graph Walk (`walk`)**: Advance step-by-step along `next`. On `tokaido`, overshooting `#24` bounces backward along `prev`. On `genji` `#15`, if `pauseOnChoice` is enabled and no `routeChoice` is preset, pause and emit `pendingChoice = { type: 'genji_branch' }`.
+5. **Contact-Node Resource Collection**: Collect regalia tokens (`kesshu`), gourmet bits + Travel Coins (`tokaido` `#2, #7, #12`), Ao-Andon lanterns + personal frenzy standby (`yokai` `#4, #10, #16, #22`), and moral balance / grudge marks (`genji`).
+6. **Single Jump-Table Lookup**: Apply `contactNode.jumpTable[roll - 1]` (at most one jump per ply; no recursive chained jumps). Negative jumps can be negated by `guard`, `purify`, or spending 1 Tokaido Travel Coin (`spendCoin`). Positive jumps on `yokai` consume pending personal Hyakki Yagyo (`×2`, or `×3` with `andon_ward`), never on the same turn the 4th lantern was lit.
+7. **Stay Penalty**: Apply `contactNode.stayTurns` unless negated by `stay`, `purify`, or spending 1 Tokaido Travel Coin.
+8. **Goal & Lock Check**: Reaching `board.goal` checks `requiredTokens`; if locked (`kesshu` without `mask = 7`), push back 1 step to `#22` and emit `goal_locked`. Otherwise award win (`resultReason = 'goal'`).
+9. **Universal Same-Square Clash & Max-Ply Settlement**: Landing on the opponent's non-start/non-goal node triggers a clash (`decoy` or `tempShield` blocks; `kesshu` offers 3 stances `assault / feint / defend`; `counter` pushes the attacker back 1 step). Reaching `maxPly` resolves by `getNodeProgress` and volume resource tie-breakers.
 
-**巻ノ肆 源氏繪合 — four-colour split tracks**  
-Sixteen outer vertical strips cycle through four pigments:
-`#5383a6` (ベロ藍), `#e8b954` (藤黄), `#e09879` (珊瑚), `#b8b6a8` (藍鼠).
-The branch at node 15 feeds a golden `good` track above and a purple `evil`
-track below; both converge on the central gold-curtain goal.
+### 4.3 Four-Tier Fair AI & Finite-Depth Expectiminimax
 
-## 4. Rules engine
+All four AI tiers (`easy`, `normal`, `hard`, `master`) use the exact same fair `rollDie` and never inspect or alter upcoming dice outcomes:
 
-### Shared contract
+- **`easy` (初伝)**: Conservative baseline; randomly picks among safe legal choices and rarely uses active skills.
+- **`normal` (中伝)**: Evaluates 1-ply expected value (`expectedValue`) across 6 equiprobable die faces (`1..6`).
+- **`hard` (奥伝)**: Combines 1-ply EV with opponent next-turn threat projection (`opponentBestThreat`).
+- **`master` (皆伝)**: Runs explicit finite-depth **Expectiminimax search (`expectiminimaxSearch`)** with:
+  - **Max Decision Nodes**: Maximizing player chooses among legal actions (`getLegalChoices`).
+  - **Min Decision Nodes**: Opponent chooses among legal actions to minimize the maximizing player's utility.
+  - **Chance Nodes (1..6)**: Averages over all 6 die outcomes with uniform weight `1/6` (`chanceRollExpectiminimax`).
+  - Supports post-roll `reroll` charm evaluation when the realized roll utility falls significantly below the 6-face chance expectation.
 
-The C11 and JS engines operate on a directed graph:
+### 4.4 C11 Legacy Prototype Boundary
 
-1. Skip turns are consumed before movement.
-2. The early-carriage charm adds one step and is consumed.
-3. `walk()` advances by the effective step count.  At the goal, `bounceBack`
-   reverses direction; otherwise movement stops.
-4. Landing resolves in this order:
-   - goal lock (regalia requirement),
-   - win check,
-   - jump table for the rolled face,
-   - stay turn,
-   - charm guards,
-   - same-square duel,
-   - token collection,
-   - branch selection.
-5. The turn passes unless the player won.
+`core/esugoroku.h`, `core/esugoroku.c`, and `core/test_rules.c` represent the initial V1.0 17–19 node C11 prototype. They are preserved for historical reference and optional C toolchain regression testing, while `mobile/js/core.js` + `mobile/js/boards.js` are the sole canonical rules authority for the V1.1–V1.3 application.
 
-### C11 API
+---
 
-```c
-typedef enum {
-    ESR_STYLE_MAWARI = 0,
-    ESR_STYLE_TOBI,
-    ESR_STYLE_KESSHU,
-    ESR_STYLE_WAKARE
-} EsrStyle;
+## 5. Rendering & Audio Architecture
 
-typedef struct EsrNode {
-    int next[2];
-    int prev;
-    int jump_table[6];
-    int stay_turns;
-    unsigned tokens;
-    EsrKind kind;
-} EsrNode;
-```
+- **3D Tabletop (`mobile/js/tabletop_3d.js`)**: Three.js WebGL scene with 3D porcelain dice bowl, bone die physics with YXZ Euler top-face verification (`evaluateDieTopFaceYXZ`), sumi-e ink splatter particles on wall collisions, and a custom post-processing Ukiyo-e woodblock shader (mulberry washi paper grain + sumi ink edge detection).
+- **2D Woodblock & Print Cache (`mobile/js/board_renderer.js`, `mobile/js/nishikie_woodblock.js`, `mobile/js/ukiyoe_art.js`)**: Procedural woodblock illustrations, bokashi gradients, and public-domain ukiyo-e print textures.
+- **Procedural Web Audio (`mobile/js/audio.js`)**: Independent Shamisen/Koto ambient BGM synthesizer (`setBgm` / `toggleBgm`) and bone-die / hinoki-komoma wood-on-wood SFX (`tileClack`, `wallHit`, `soulBurst`).
 
-The engine exposes board builders, `esr_match_init`, `esr_apply_roll`,
-`esr_preview_destinations`, `esr_expected_value` and event collection.
+### Runtime Dependency Boundary
 
-### JavaScript mirror
+All game rules, AI, state persistence, WOFF2 fonts (`mobile/assets/fonts/`), and audio synthesis are 100% local with zero external API calls. The 3D WebGL view imports `three@0.170.0` via `<script type="importmap">` in `mobile/index.html` (`https://cdn.jsdelivr.net/npm/three@0.170.0/`).
 
-`mobile/js/core.js` exports `EsugorokuCore`, `ESR_STYLE` and `ESR_CHARM`.
-`applyRoll()` returns `{ state, events, won }`.  `previewDestinations()` is
-shared by the renderer and E2E tests so the drawn arc and the actual landing
-cannot drift apart.
+---
 
-### AI
+## 6. Persistence & Profile v1 -> v2 Migration
 
-The opponent evaluates every legal die face with a one-ply expected value:
+`mobile/js/state.js` implements idempotent migration (`migrateProfileData`) from `esugoroku.profile.v1` to `esugoroku.profile.v2`, preserving all unlocked cards while validating the 3-charm loadout (`sanitizeCharmLoadout`), custom hand card (`customHandCard`), AI difficulty (`easy | normal | hard | master`), match records (`records`), and 24 achievements (`achievements`).
 
-- +1000 for a win,
-- -1000 for an opponent win,
-- progress toward the goal,
-- regalia tokens weighted positively,
-- turns skipped and bounce risk penalised.
+---
 
-The same function is tested in both engines.
-
-## 5. Rendering pipeline
-
-### Static print cache
-
-For each volume, `board_renderer.js` renders the paper, border, patterns,
-connectors and every node art into an offscreen canvas once.  The main loop
-draws:
-
-1. cached board image,
-2. dynamic preview arcs (tobi only),
-3. animated pieces,
-4. dice vessel,
-5. 3D dice,
-6. local landing gold-cloud / sakura particles,
-7. HUD, stamps and toasts.
-
-Changing volumes invalidates the cache.  Window resize only changes the stage
-transform; it does not repaint the print cache.
-
-### Ukiyo-e primitives
-
-| Module | Responsibility |
-|---|---|
-| `art_core.js` | washi fibres, mica, stains, bokashi, seigaiha, asanoha, ichimatsu, kikkō, sayagata, clouds, Fuji, pines, waves, roofs, torii, lanterns, seals, komae, gold leaf, bamboo, cranes |
-| `art_figures.js` | multi-layer Bézier travellers, beauties, warriors, yōkai, Genji ladies, crane pairs |
-| `art_scenes.js` | Tōkaidō landmarks and food still lifes, yōkai night, warrior camps and armour, Genji interiors, all four goal scenes |
-| `ukiyoe_art.js` | `drawNodeArt`, `drawUkiyoeCard`, `drawCharmCard`, `drawCardBack`, `drawPortrait`, `drawMiniCardArt` |
-
-No stick figures are used.  Even the smallest card art is composed from
-overlapping Bézier bodies, robes, hair masses, props and a paper/ink overlay.
-
-### 3D dice
-
-`drawDie3D()` builds a cube from six quads, applies an Euler rotation matrix and
-projects vertices with a perspective divide.  It paints backfaces first, then
-front faces, ivory grain, pips and a contact shadow.  The resting orientation is
-chosen from the die value.
-
-The vessel is drawn by `drawDiceDevice()` and is volume-specific:
-
-| Volume | Vessel |
-|---|---|
-| Tōkaidō | white porcelain bowl with blue chrysanthemum band |
-| Yōkai | black bamboo tube with vermilion talisman |
-| Kesshu | hexagonal gold makie army tube |
-| Genji | vermilion lacquer tube with golden cranes |
-
-### Stability
-
-While the dice are tumbling:
-
-- no board transform or camera shake is applied,
-- no full-screen particles are spawned,
-- the board cache is not invalidated,
-- only dice, shadows and vessel tilt animate.
-
-Landing effects are emitted at the final node centre with a short lifetime.
-The browser suite captures two board crops during a throw and verifies that
-fewer than 3.5% of pixels change (the idle pawn bob is the only allowed motion).
-
-## 6. Screens and interaction
-
-`ui_screens.js` renders:
-
-- four-volume selection with mini board previews,
-- side/charm selection,
-- 36-card and 3-charm gallery,
-- settlement panel.
-
-`main.js` owns the state machine:
+## 7. Verification Pipeline
 
 ```text
-SELECT_BOARD ──click card──▶ SELECT_SIDE ──出陣──▶ PLAYING
-      ▲                         │                    │
-      └────────menu/Esc─────────┴────settlement──────┘
+python3 tools/verify_all.py --browser --port 8090
+├── file-layout & independence audit      32 checks
+├── node --check on every JS module       18 checks
+├── C11 legacy prototype verification     static check (or 92 checks when gcc/cc is installed)
+├── node tools/test_js_rules.mjs          55 deterministic unit & batch simulation tests
+└── tools/test_browser_e2e.py             157 headless Chromium E2E checks
+    ├── HTTP headers / CSP / MIME / PWA manifest
+    ├── boot, 12-charm pool, 24 achievements & volume selection
+    ├── four volume contracts (25 / 25 / 24 / 27 nodes, goals #24 / #24 / #23 / #26)
+    ├── rule branch matrix (Tokaido coins/bounce, Yokai 4 lanterns, Kesshu 3 stances, Genji active choice + parity fallback)
+    ├── 3D dice Euler alignment, 3-slot charm loadout & master Expectiminimax switch
+    └── gallery, achievements & settlement flows
 ```
-
-Input paths:
-
-- pointer down/up on the canvas,
-- pointer capture for the dice vessel,
-- `Space` to roll,
-- `Esc` to close gallery / side screen.
-
-## 7. State and persistence
-
-`state.js` keeps a single `G` object: screen, volume index, match, dice physics,
-particles, gallery state, HUD counters and profile cache.
-
-`localStorage` stores collection/unlocks only.  A match is intentionally not
-resumed across reloads; this keeps the E2E state deterministic.
-
-## 8. Test surface
-
-`main.js` exposes `window.__ESR__`:
-
-```js
-__ESR__.snapshot()                 // geometry, UI, rules, positions, dice
-__ESR__.switchToBoard(i)           // deterministic scene switch
-__ESR__.applyRollNow(value)        // apply a rule result without waiting
-__ESR__.roll(value)                // real physics path with a forced value
-__ESR__.settleMove()
-__ESR__.setTurn(side)
-__ESR__.showGallery(on, tab)
-__ESR__.selectRect(index)
-__ESR__.boards / cards / charms
-```
-
-The browser suite uses only this public debug surface plus real pointer events
-for the selection, start, gallery-close and settlement-menu buttons.
-
-## 9. Verification pipeline
-
-```text
-verify_all.py
-├── layout & independence audit
-├── node --check on every JS module
-├── gcc -std=c11 -Wall -Wextra -Werror
-│   └── core/test_rules.c             92 checks
-├── node tools/test_js_rules.mjs       22 tests
-└── --browser
-    └── test_browser_e2e.py           137 checks
-        ├── HTTP headers / MIME
-        ├── boot & selection
-        ├── four volume contracts
-        ├── rule branch matrix
-        ├── dice & stability crop diff
-        └── gallery / settlement
-```
-
-All suites are deterministic: browser tests force die values instead of
-waiting for random outcomes.
-
-## 10. Server
-
-`server.js` is a zero-dependency Node HTTP server.  It serves only `mobile/`,
-normalises paths to prevent traversal, supports `GET`/`HEAD`, sets strict
-no-store and security headers, and maps `manifest.json` to
-`application/manifest+json`.
-
-Default address: <http://localhost:8090/>.

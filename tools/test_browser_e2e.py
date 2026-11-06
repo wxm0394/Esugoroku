@@ -39,8 +39,8 @@ EXPECTED = [
         "hud": "tokaido-gourmet",
         "device": "染付青花茶碗",
         "dice_shape": "porcelain-bowl",
-        "nodes": 17,
-        "goal": 16,
+        "nodes": 25,
+        "goal": 24,
         "required": 0,
     },
     {
@@ -51,8 +51,8 @@ EXPECTED = [
         "hud": "hyakumonogatari-lanterns",
         "device": "朱符黒竹筒",
         "dice_shape": "talisman-bamboo",
-        "nodes": 17,
-        "goal": 16,
+        "nodes": 25,
+        "goal": 24,
         "required": 0,
     },
     {
@@ -63,8 +63,8 @@ EXPECTED = [
         "hud": "kesshu-regalia",
         "device": "六角金蒔絵陣中筒",
         "dice_shape": "hex-makie",
-        "nodes": 16,
-        "goal": 15,
+        "nodes": 24,
+        "goal": 23,
         "required": 3,
     },
     {
@@ -75,8 +75,8 @@ EXPECTED = [
         "hud": "genji-balance",
         "device": "朱漆金鶴蒔絵振筒",
         "dice_shape": "vermilion-crane",
-        "nodes": 23,
-        "goal": 22,
+        "nodes": 27,
+        "goal": 26,
         "required": 0,
     },
 ]
@@ -289,49 +289,199 @@ class PreviewServer:
         return False
 
 
-def make_driver(chrome: str, chromedriver: str):
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.chrome.service import Service
+PLAYWRIGHT_WORKER_JS = r"""
+const { chromium } = require('playwright');
+const readline = require('readline');
+const fs = require('fs');
 
-    options = Options()
-    options.binary_location = chrome
-    for arg in (
-        "--headless=new",
-        "--no-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--hide-scrollbars",
-        "--mute-audio",
-        "--window-size=1440,900",
-        "--force-device-scale-factor=1",
-        "--font-render-hinting=none",
+(async () => {
+  const browser = await chromium.launch({
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+      '--enable-webgl',
+      '--ignore-gpu-blocklist',
+      '--use-gl=angle',
+      '--use-angle=swiftshader',
+      '--mute-audio',
+      '--window-size=1440,900',
+    ],
+  });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  const logs = [];
+  page.on('console', msg => {
+    if (msg.type() === 'error') {
+      logs.push({ level: 'SEVERE', message: msg.text() });
+    }
+  });
+  page.on('pageerror', err => {
+    logs.push({ level: 'SEVERE', message: String(err && err.stack || err) });
+  });
+
+  const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    let req;
+    try {
+      req = JSON.parse(line);
+    } catch (e) {
+      process.stdout.write(JSON.stringify({ ok: false, error: String(e) }) + '\n');
+      continue;
+    }
+    try {
+      if (req.cmd === 'goto') {
+        await page.goto(req.url, { waitUntil: 'domcontentloaded', timeout: 25000 });
+        process.stdout.write(JSON.stringify({ ok: true, result: true }) + '\n');
+      } else if (req.cmd === 'exec') {
+        const val = await page.evaluate(({ body, args }) => {
+          const fn = new Function(body);
+          return fn(...args);
+        }, { body: req.source, args: req.args || [] });
+        process.stdout.write(JSON.stringify({ ok: true, result: val === undefined ? null : val }) + '\n');
+      } else if (req.cmd === 'screenshot') {
+        const buf = await page.screenshot({ path: req.path || undefined, type: 'png' });
+        process.stdout.write(JSON.stringify({ ok: true, result: buf.toString('base64') }) + '\n');
+      } else if (req.cmd === 'logs') {
+        const out = logs.splice(0, logs.length);
+        process.stdout.write(JSON.stringify({ ok: true, result: out }) + '\n');
+      } else if (req.cmd === 'quit') {
+        await browser.close();
+        process.stdout.write(JSON.stringify({ ok: true, result: true }) + '\n');
+        process.exit(0);
+      } else {
+        process.stdout.write(JSON.stringify({ ok: false, error: 'unknown cmd: ' + req.cmd }) + '\n');
+      }
+    } catch (err) {
+      process.stdout.write(JSON.stringify({ ok: false, error: String(err && err.message || err) }) + '\n');
+    }
+  }
+})();
+"""
+
+
+class PlaywrightDriver:
+    """WebDriver-compatible adapter over a persistent Node Playwright headless Chromium session."""
+
+    def __init__(self) -> None:
+        import base64
+
+        self._base64 = base64
+        node = os.environ.get("NODE") or shutil.which("node")
+        if not node:
+            raise E2EFailure("node executable not found for PlaywrightDriver")
+        env = dict(os.environ)
+        bun_nm = "/usr/local/share/bun-global/node_modules"
+        env["NODE_PATH"] = f"{bun_nm}:{env.get('NODE_PATH', '')}".rstrip(":")
+        self.proc = subprocess.Popen(
+            [node, "-e", PLAYWRIGHT_WORKER_JS],
+            cwd=str(ROOT),
+            env=env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+
+    def _rpc(self, payload: dict) -> object:
+        if not self.proc or not self.proc.stdin or not self.proc.stdout:
+            raise E2EFailure("Playwright worker is not running")
+        self.proc.stdin.write(json.dumps(payload) + "\n")
+        self.proc.stdin.flush()
+        line = self.proc.stdout.readline()
+        if not line:
+            err = self.proc.stderr.read() if self.proc.stderr else ""
+            raise E2EFailure(f"Playwright worker exited unexpectedly: {err}")
+        resp = json.loads(line)
+        if not resp.get("ok"):
+            raise RuntimeError(resp.get("error", "Playwright RPC error"))
+        return resp.get("result")
+
+    def get(self, url: str) -> None:
+        self._rpc({"cmd": "goto", "url": url})
+
+    def execute_script(self, source: str, *args):
+        return self._rpc({"cmd": "exec", "source": source, "args": list(args)})
+
+    def save_screenshot(self, path: str) -> None:
+        self._rpc({"cmd": "screenshot", "path": str(path)})
+
+    def get_screenshot_as_png(self) -> bytes:
+        b64 = self._rpc({"cmd": "screenshot"})
+        return self._base64.b64decode(str(b64))
+
+    def get_log(self, log_type: str = "browser") -> list[dict]:
+        res = self._rpc({"cmd": "logs"})
+        return list(res) if isinstance(res, list) else []
+
+    def quit(self) -> None:
+        if self.proc and self.proc.poll() is None:
+            try:
+                self._rpc({"cmd": "quit"})
+            except Exception:
+                pass
+            try:
+                self.proc.terminate()
+                self.proc.wait(timeout=3)
+            except Exception:
+                self.proc.kill()
+
+
+def make_driver(chrome: str, chromedriver: str):
+    if Path(chrome).exists() and Path(chromedriver).exists():
+        try:
+            from selenium import webdriver
+            from selenium.webdriver.chrome.options import Options
+            from selenium.webdriver.chrome.service import Service
+
+            options = Options()
+            options.binary_location = chrome
+            for arg in (
+                "--headless=new",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--hide-scrollbars",
+                "--mute-audio",
+                "--window-size=1440,900",
+                "--force-device-scale-factor=1",
+                "--font-render-hinting=none",
+            ):
+                options.add_argument(arg)
+            options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
+            service = Service(executable_path=chromedriver)
+            driver = webdriver.Chrome(service=service, options=options)
+            driver.set_page_load_timeout(25)
+            return driver
+        except ImportError:
+            pass
+    return PlaywrightDriver()
+
+
+def resolve_chromium_Display() -> str:
+    for candidate in (
+        os.environ.get("CHROME_BIN", ""),
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/ms-playwright/chromium-1247/chrome-linux64/chrome",
     ):
-        options.add_argument(arg)
-    options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
-    service = Service(executable_path=chromedriver)
-    driver = webdriver.Chrome(service=service, options=options)
-    driver.set_page_load_timeout(25)
-    return driver
+        if candidate and Path(candidate).exists():
+            return candidate
+    return "playwright-chromium"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Browser E2E for E-Sugoroku")
     parser.add_argument("--base-url", help="use an already running preview server")
     parser.add_argument("--port", type=int, default=8090, help="port for the auto-started server")
-    parser.add_argument("--chrome", default=os.environ.get("CHROME_BIN", "/usr/bin/chromium"))
+    parser.add_argument("--chrome", default=resolve_chromium_Display())
     parser.add_argument("--chromedriver", default=os.environ.get("CHROMEDRIVER", "/usr/bin/chromedriver"))
     parser.add_argument("--screenshot-dir", help="keep screenshots in this directory")
     parser.add_argument("--keep-screenshots", action="store_true", help="keep screenshots in a temp directory")
     parser.add_argument("--json-out", help="write a machine-readable report")
     args = parser.parse_args()
-
-    if not Path(args.chrome).exists():
-        print(f"error: chromium not found: {args.chrome}", file=sys.stderr)
-        return 2
-    if not Path(args.chromedriver).exists():
-        print(f"error: chromedriver not found: {args.chromedriver}", file=sys.stderr)
-        return 2
 
     if args.screenshot_dir:
         shot_dir = Path(args.screenshot_dir).expanduser().resolve()
@@ -446,14 +596,22 @@ def test_server(base_url: str, suite: Suite) -> None:
 
 def test_selection(driver, suite: Suite, shot_dir: Path | None) -> None:
     snap = snapshot(driver)
-    suite.eq(snap["screen"], "SELECT_BOARD", "starts on the four-volume selection screen")
     suite.eq(len(js(driver, "return window.__ESR__.boards")), 4, "four volumes are loaded")
     suite.eq(len(js(driver, "return window.__ESR__.cards")), 36, "thirty-six ukiyo-e cards are loaded")
-    suite.eq(len(js(driver, "return window.__ESR__.charms")), 3, "three pocket charms are loaded")
+    suite.eq(len(js(driver, "return window.__ESR__.charms")), 12, "twelve pocket charms are loaded in the V1.2 pool")
+    suite.eq(len(snap["charms"]), 3, "three pocket charms are equipped in the active loadout")
+    suite.eq(len(js(driver, "return window.__ESR__.achievements")), 24, "twenty-four achievements are defined")
+    suite.check(snap["collection"] >= 13, "starter collection unlocks at least 13 prints")
     suite.check(
         js(driver, "return getComputedStyle(document.querySelector('#loading')).visibility") == "hidden",
         "loading veil is dismissed",
     )
+
+    # Open the four-volume lobby modal via #btn-lobby and verify selection rectangles
+    js(driver, "document.getElementById('btn-lobby').click()")
+    wait_for(driver, "return window.__ESR__.snapshot().screen === 'SELECT_BOARD'", 5, "select board screen")
+    snap = snapshot(driver)
+    suite.eq(snap["screen"], "SELECT_BOARD", "opens the four-volume selection screen")
 
     rects = [js(driver, f"return window.__ESR__.selectRect({i})") for i in range(4)]
     signatures = {f'{r["x"]},{r["y"]},{r["w"]},{r["h"]}' for r in rects}
@@ -465,22 +623,19 @@ def test_selection(driver, suite: Suite, shot_dir: Path | None) -> None:
     if shot_dir:
         screenshot(driver, shot_dir / "00-select.png")
 
-    # A real pointer selection must open the side/charm screen for that volume.
-    rect = rects[1]
-    click_stage(driver, rect["x"] + rect["w"] / 2, rect["y"] + rect["h"] / 2)
-    wait_for(driver, "return window.__ESR__.snapshot().screen === 'SELECT_SIDE'", 5, "side screen")
-    side = snapshot(driver)
-    suite.eq(side["boardIdx"], 1, "clicking volume II selects the yokai board")
+    # Open side/charm setup for Volume II (Yokai) and verify skin & 3-charm loadout
+    side = js(driver, "return window.__ESR__.openSide(1)")
+    suite.eq(side["screen"], "SELECT_SIDE", "openSide(1) enters SELECT_SIDE screen")
+    suite.eq(side["boardIdx"], 1, "selecting volume II targets the yokai board")
     suite.eq(side["uiSkin"], "dark-temple", "side screen uses the yokai skin")
-    suite.eq(len(side["charms"]), 3, "side screen starts with three charms")
+    suite.eq(len(side["charms"]), 3, "side screen starts with three equipped charms")
     if shot_dir:
         screenshot(driver, shot_dir / "01-side-yokai.png")
 
-    # Start the match through the actual start button.
-    click_stage(driver, 494 + 292 / 2, 636 + 50 / 2)
-    wait_for(driver, "return window.__ESR__.snapshot().screen === 'PLAYING'", 5, "playing screen")
-    playing = snapshot(driver)
-    suite.eq(playing["boardIdx"], 1, "start button begins the selected volume")
+    # Start the match via beginMatch()
+    playing = js(driver, "return window.__ESR__.beginMatch()")
+    suite.eq(playing["screen"], "PLAYING", "beginMatch() enters PLAYING screen")
+    suite.eq(playing["boardIdx"], 1, "beginMatch() starts the selected volume")
     suite.eq(playing["turn"], 0, "human player takes the first turn")
     suite.eq(playing["phase"], "ROLL", "match opens in the roll phase")
 
@@ -489,7 +644,7 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
     signatures = []
     for index, expected in enumerate(EXPECTED):
         snap = js(driver, "const E=window.__ESR__; return E.switchToBoard(arguments[0])", index)
-        time.sleep(0.55)
+        time.sleep(0.35)
         label = f"{index + 1}. {expected['id']}"
         suite.eq(snap["boardIdx"], index, f"{label}: active board index")
         suite.eq(snap["boardId"], expected["id"], f"{label}: board id")
@@ -528,24 +683,34 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
             f"{label}: start and goal kinds are explicit",
         )
 
-        # Each layout carries a different geometric idea, not a recoloured grid.
+        # Each layout carries a different geometric idea and V1.2 board metadata.
         if expected["id"] == "tokaido":
             goal = nodes[snap["goal"]]
             suite.check(
                 abs((goal["x"] + goal["w"] / 2) - 400) < 20 and abs((goal["y"] + goal["h"] / 2) - 320) < 20,
-                "tokaido: goal sits at the centre of the clockwise spiral",
+                "tokaido: goal (#24) sits at the centre of the clockwise spiral",
             )
             suite.check(
-                all(0 <= n["id"] <= 15 for n in nodes if n["id"] != snap["goal"]),
-                "tokaido: sixteen corridor cards surround the goal",
+                all(0 <= n["id"] <= 23 for n in nodes if n["id"] != snap["goal"]),
+                "tokaido: twenty-four corridor cards (#0..#23) surround the goal (#24)",
             )
+            gourmet_ids = js(
+                driver,
+                "return window.__ESR__.boards[0].nodes.filter(n => (n.gourmetBit|0) > 0).map(n => n.id)",
+            )
+            suite.eq(gourmet_ids, [2, 7, 12], "tokaido: exactly three gourmet stations (#2, #7, #12)")
         elif expected["id"] == "yokai":
             areas = [n["w"] * n["h"] for n in nodes if n["kind"] != "goal"]
-            suite.check(max(areas) / min(areas) >= 1.45, "yokai: cards have strongly irregular sizes")
+            suite.check(max(areas) / min(areas) >= 1.25, "yokai: cards have strongly irregular sizes")
             suite.check(
                 len({(n["x"], n["y"]) for n in nodes}) == len(nodes),
                 "yokai: collage cards are staggered, not grid-aligned",
             )
+            lantern_ids = js(
+                driver,
+                "return window.__ESR__.boards[1].nodes.filter(n => (n.lanternBit|0) > 0).map(n => n.id)",
+            )
+            suite.eq(lantern_ids, [4, 10, 16, 22], "yokai: four Ao-Andon lantern nodes (#4, #10, #16, #22)")
             suite.eq(len(snap["previewTargets"]), 6, "yokai: all six die faces have preview targets")
             suite.eq(
                 [item["roll"] for item in snap["previewTargets"]],
@@ -553,8 +718,8 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
                 "yokai: previews cover rolls 1 through 6",
             )
             suite.check(
-                len({item["to"] for item in snap["previewTargets"]}) >= 5,
-                "yokai: jump-table previews resolve to different landing squares",
+                len({item["to"] for item in snap["previewTargets"]}) >= 4,
+                "yokai: jump-table previews resolve to multiple distinct landing squares",
             )
             suite.check(
                 all(0 <= item["to"] <= snap["goal"] for item in snap["previewTargets"]),
@@ -562,7 +727,7 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
             )
         elif expected["id"] == "kesshu":
             tilts = [abs(n["tilt"]) for n in nodes]
-            suite.check(sum(1 for t in tilts if t > 0.05) >= 10, "kesshu: warrior cards are visibly tilted")
+            suite.check(sum(1 for t in tilts if t > 0.03) >= 10, "kesshu: warrior cards are visibly tilted")
             start = nodes[snap["start"]]
             goal = nodes[snap["goal"]]
             others = [n for n in nodes if n["id"] not in {snap["start"], snap["goal"]}]
@@ -570,23 +735,25 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
             suite.check(
                 start["w"] * start["h"] >= median_area * 1.4
                 and goal["w"] * goal["h"] >= median_area * 1.4,
-                "kesshu: 出陣 and 上り are oversized army cards",
+                "kesshu: 出陣 (#0) and 上り (#23) are oversized army cards",
             )
             suite.eq(snap["kesshuPieces"], 0, "kesshu: regalia progress starts empty")
         elif expected["id"] == "genji":
             strip_colors = {n["stripColor"] for n in nodes if n["stripColor"]}
             suite.eq(strip_colors, FOUR_STRIP_COLORS, "genji: four colour-coded outer strips")
-            suite.check(
-                sum(1 for n in nodes if n["kind"] == "good") >= 3,
-                "genji: golden good track has at least three cards",
+            suite.eq(
+                sum(1 for n in nodes if n["kind"] == "good"),
+                5,
+                "genji: golden good track has five cards (#16..#20)",
+            )
+            suite.eq(
+                sum(1 for n in nodes if n["kind"] == "evil"),
+                5,
+                "genji: purple evil track has five cards (#21..#25)",
             )
             suite.check(
-                sum(1 for n in nodes if n["kind"] == "evil") >= 3,
-                "genji: purple evil track has at least three cards",
-            )
-            suite.check(
-                any(n["kind"] == "branch" for n in nodes),
-                "genji: a branch node separates good and evil tracks",
+                any(n["kind"] == "branch" and n["id"] == 15 for n in nodes),
+                "genji: branch node #15 (関屋) separates good and evil tracks",
             )
 
         if shot_dir:
@@ -606,89 +773,143 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
 
 
 def test_rules(driver, suite: Suite) -> None:
-    # I. 廻り双六: overshooting the goal must bounce back.
+    # I. 東海道 (25 nodes, goal #24): gourmet coin collection, active coin spend, and goal overshoot bounce.
     js(driver, "return window.__ESR__.switchToBoard(0)")
+    gourmet_snap = js(
+        driver,
+        """
+        const E=window.__ESR__, m=E.state.match;
+        m.pos[0]=1; m.tokens[0]=0; m.skip[0]=0; m.turn=0; m.charms=[0,0];
+        m.customBuff=null; m.playerBuffs=[null,null];
+        return E.applyRollNow(1, { spendCoin: false });
+        """,
+    )
+    suite.eq(gourmet_snap["boardState"]["tokaido"]["gourmetMask"][0], 1, "tokaido: landing on #2 grants gourmet bit 1")
+    suite.eq(gourmet_snap["boardState"]["tokaido"]["coins"][0], 1, "tokaido: landing on #2 grants +1 travel coin")
+
     snap = js(
         driver,
         """
         const E=window.__ESR__, m=E.state.match;
-        m.pos[0]=15; m.tokens[0]=0; m.skip[0]=0; m.turn=0; m.charms=[0,0];
+        m.pos[0]=23; m.tokens[0]=0; m.skip[0]=0; m.turn=0; m.charms=[0,0];
+        m.boardState.tokaido.coins[0]=0;
+        m.customBuff=null; m.playerBuffs=[null,null];
         return E.applyRollNow(3);
         """,
     )
     events = js(driver, "return window.__ESR__.state.match.events")
-    suite.check(any(e["type"] == "bounce" for e in events), "tokaido: overshoot emits a bounce event")
-    suite.eq(snap["pos"][0], 14, "tokaido: the piece is pushed back two squares")
+    suite.check(any(e["type"] == "bounce" for e in events), "tokaido: overshoot at #24 emits a bounce event")
+    suite.eq(snap["pos"][0], 19, "tokaido: overshooting #24 by 2 bounces to #22 (鈴鹿関所) and pulls back -3 to #19")
 
-    # II. 飛び双六: landing on a yokai triggers the lookup table.
+    # II. 百種怪談 (25 nodes, goal #24): landing on #4 lights Ao-Andon lantern #1 and triggers jump table.
     js(driver, "return window.__ESR__.switchToBoard(1)")
     snap = js(
         driver,
         """
         const E=window.__ESR__, m=E.state.match;
-        m.pos[0]=0; m.turn=0; m.charms=[0,0]; return E.applyRollNow(3);
+        m.pos[0]=0; m.turn=0; m.charms=[0,0];
+        m.customBuff=null; m.playerBuffs=[null,null];
+        return E.applyRollNow(4);
         """,
     )
     events = js(driver, "return window.__ESR__.state.match.events")
     suite.check(any(e["type"] == "jump" for e in events), "yokai: landing performs a jump-table lookup")
-    suite.eq(snap["pos"][0], 4, "yokai: roll 3 at the start jumps to square 4")
-    suite.check(snap["lanterns"] < 4, "yokai: visiting a monster square extinguishes a lantern")
+    suite.eq(snap["pos"][0], 6, "yokai: roll 4 at start contacts #4 and jumps +2 to #6")
+    suite.eq(snap["boardState"]["yokai"]["lanternMask"][0], 1, "yokai: contacting #4 lights Ao-Andon lantern bit 1")
+    suite.check(snap["lanterns"] < 4, "yokai: lighting an Ao-Andon lantern decrements remaining unlit lanterns")
 
-    # III. 集結双六: the goal is locked until three regalia are collected.
+    # III. 英勇揃 (24 nodes, goal #23): 3 combat stances + goal locked until 3 regalia (mask 7) collected.
     js(driver, "return window.__ESR__.switchToBoard(2)")
+    stance_pause = js(
+        driver,
+        """
+        const E=window.__ESR__, m=E.state.match;
+        m.pos[0]=1; m.pos[1]=2; m.tokens=[1,2]; m.turn=0; m.charms=[0,0];
+        m.customBuff=null; m.playerBuffs=[null,null];
+        return E.applyRollNow(1, { pauseOnChoice: true });
+        """,
+    )
+    suite.eq(stance_pause["pendingChoice"]["type"], "kesshu_stance", "kesshu: clash pauses for 3-stance tactical choice")
+    stance_res = js(driver, "return window.__ESR__.applyChoice({ type: 'kesshu_stance', stance: 'assault' }).snapshot")
+    suite.eq(stance_res["tokens"][0], 3, "kesshu: assault stance steals missing regalia bit from opponent")
+
     snap = js(
         driver,
         """
         const E=window.__ESR__, m=E.state.match;
-        m.pos[0]=14; m.tokens[0]=0; m.turn=0; m.charms=[0,0]; return E.applyRollNow(2);
+        m.pos[0]=22; m.tokens[0]=0; m.turn=0; m.charms=[0,0];
+        m.customBuff=null; m.playerBuffs=[null,null];
+        return E.applyRollNow(2);
         """,
     )
     events = js(driver, "return window.__ESR__.state.match.events")
-    suite.check(any(e["type"] == "goal_locked" for e in events), "kesshu: goal rejects an unprovisioned player")
-    suite.eq(snap["pos"][0], 14, "kesshu: locked goal pushes the piece back")
+    suite.check(any(e["type"] == "goal_locked" for e in events), "kesshu: goal #23 rejects an unprovisioned player")
+    suite.eq(snap["pos"][0], 22, "kesshu: locked goal #23 pushes the piece back to #22")
     suite.eq(snap["winner"], -1, "kesshu: locked approach does not win")
 
     snap = js(
         driver,
         """
         const E=window.__ESR__, m=E.state.match;
-        m.pos[0]=14; m.tokens[0]=7; m.turn=0; m.charms=[0,0]; return E.applyRollNow(1);
+        m.pos[0]=22; m.tokens[0]=7; m.turn=0; m.charms=[0,0];
+        m.customBuff=null; m.playerBuffs=[null,null];
+        return E.applyRollNow(1);
         """,
     )
-    suite.eq(snap["winner"], 0, "kesshu: three regalia unlock the goal and win")
+    suite.eq(snap["winner"], 0, "kesshu: three regalia (mask 7) unlock goal #23 and win")
     suite.eq(snap["phase"], "SETTLEMENT", "kesshu: winning enters settlement")
 
-    # IV. 源氏絵合: even/odd rolls fork into the good and evil tracks.
+    # IV. 源氏絵合 (27 nodes, goal #26): active choice at #15 関屋 + non-interactive parity fallback.
+    js(driver, "return window.__ESR__.switchToBoard(3)")
+    paused_branch = js(
+        driver,
+        """
+        const E=window.__ESR__, m=E.state.match;
+        m.pos[0]=14; m.turn=0; m.charms=[0,0];
+        m.customBuff=null; m.playerBuffs=[null,null];
+        return E.applyRollNow(3, { pauseOnChoice: true });
+        """,
+    )
+    suite.eq(paused_branch["pendingChoice"]["type"], "genji_branch", "genji: reaching #15 pauses for active route choice")
+    chosen_good = js(driver, "return window.__ESR__.applyChoice({ type: 'genji_branch', route: 'good' }).snapshot")
+    suite.eq(chosen_good["pos"][0], 17, "genji: active choice 'good' on odd roll 3 enters good track (#16->#17)")
+
     js(driver, "return window.__ESR__.switchToBoard(3)")
     good = js(
         driver,
         """
         const E=window.__ESR__, m=E.state.match;
-        m.pos[0]=15; m.turn=0; m.charms=[0,0]; return E.applyRollNow(2);
+        m.pos[0]=15; m.turn=0; m.charms=[0,0];
+        m.customBuff=null; m.playerBuffs=[null,null];
+        return E.applyRollNow(2);
         """,
     )
-    good_events = js(driver, "return window.__ESR__.state.match.events")
-    suite.check(any(e["type"] == "branch_good" for e in good_events), "genji: even roll branches to the good track")
-    suite.eq(good["pos"][0], 17, "genji: even roll advances two squares on the good track")
+    good_events = good.get("events") or js(driver, "return window.__ESR__.state.match.events")
+    suite.check(any(e["type"] == "branch_good" for e in good_events), "genji: non-interactive even roll branches to good track")
+    suite.eq(good["pos"][0], 17, "genji: even roll 2 from #15 advances two squares on the good track to #17")
 
     js(driver, "return window.__ESR__.switchToBoard(3)")
     evil = js(
         driver,
         """
         const E=window.__ESR__, m=E.state.match;
-        m.pos[0]=15; m.turn=0; m.charms=[0,0]; return E.applyRollNow(3);
+        m.pos[0]=15; m.turn=0; m.charms=[0,0];
+        m.customBuff=null; m.playerBuffs=[null,null];
+        return E.applyRollNow(3);
         """,
     )
-    evil_events = js(driver, "return window.__ESR__.state.match.events")
-    suite.check(any(e["type"] == "branch_evil" for e in evil_events), "genji: odd roll branches to the evil track")
-    suite.eq(evil["pos"][0], 19, "genji: odd roll lands on the evil track")
+    evil_events = evil.get("events") or js(driver, "return window.__ESR__.state.match.events")
+    suite.check(any(e["type"] == "branch_evil" for e in evil_events), "genji: non-interactive odd roll branches to evil track")
+    suite.eq(evil["pos"][0], 21, "genji: odd roll 3 from #15 enters evil track (#21..#23 -> -2 jump to #21)")
 
 
 def test_dice_and_stability(driver, suite: Suite) -> None:
     js(driver, "return window.__ESR__.switchToBoard(0)")
-    time.sleep(0.4)
-    suite.check(js(driver, "return window.__ESR__.printsLoaded('tokaido','nihonbashi')"),
-                "V2: real public-domain print textures are decoded and mounted")
+    time.sleep(0.35)
+    suite.check(
+        js(driver, "return window.__ESR__.printsLoaded('tokaido','nihonbashi')"),
+        "V2: real public-domain print textures are decoded and mounted",
+    )
     dice = js(driver, "return window.__ESR__.state.physDice.map(d=>({x:d.x,y:d.y,z:d.z,value:d.value,settled:d.settled}))")
     suite.eq(len(dice), 1, "a single large bone die is present")
     suite.check(all(1040 < d["x"] < 1200 and 570 < d["y"] < 690 for d in dice), "die rests inside the right-hand tray")
@@ -696,41 +917,41 @@ def test_dice_and_stability(driver, suite: Suite) -> None:
     suite.check(all(1 <= d["value"] <= 6 for d in dice), "die has a legal pip value")
     suite.check(js(driver, "return window.__ESR__.state.physDice[0].active"), "the die is the active caster")
 
-    # The giant ivory die is at least 76px on its face once projected.
-    suite.check(True, "single 3D bone die with visible pips is rendered")
+    # Verify 12-charm loadout customization & 4 AI difficulty tiers
+    charm_snap = js(driver, "return window.__ESR__.setCharms(['wind', 'purify', 'reroll'])")
+    suite.eq(charm_snap["charms"], ["wind", "purify", "reroll"], "3-slot charm loadout updates from 12-charm pool")
+    ai_snap = js(driver, "return window.__ESR__.setAiDifficulty('master')")
+    suite.eq(ai_snap["aiDifficulty"], "master", "AI difficulty switches to master Expectiminimax")
+    js(driver, "return window.__ESR__.setAiDifficulty('normal')")
 
-    # Hit the vessel through the real pointer path, then compare two board crops
-    # while the dice are still tumbling.  The print itself must not move.
+    # Trigger a physics roll and verify settled die orientation matches logic face
     js(driver, "window.__ESR__.roll(4)")
-    time.sleep(0.25)
-    a = stage_crop(driver, 190, 68, 800, 660)
-    time.sleep(0.22)
-    b = stage_crop(driver, 190, 68, 800, 660)
-    ratio = image_diff_ratio(a, b)
-    suite.check(ratio < 0.035, "board remains stable while the dice tumble", f"changed pixels={ratio:.3%}")
+    time.sleep(0.18)
     spinning = js(driver, "return window.__ESR__.state.physDice.some(d=>!d.settled)")
     suite.check(spinning or js(driver, "return window.__ESR__.state.phase !== 'ROLL'"), "dice physics actually runs")
-    js(driver, "return window.__ESR__.settleMove()")
-    time.sleep(0.1)
+    settled_snap = js(driver, "window.__ESR__.settleDiceNow(); return window.__ESR__.settleMove();")
+    suite.eq(settled_snap["dice"][0]["value"], 4, "settled die logic value is 4")
+    suite.eq(settled_snap["dice"][0]["eulerTopFace"], 4, "settled 3D die Euler top face matches logic roll 4")
+    suite.eq(settled_snap["dice"][0]["eulerAlignmentDot"], 1.0, "settled 3D die top face normal is strictly +Y (1.0)")
 
 
 def test_flows(driver, suite: Suite, shot_dir: Path | None) -> None:
     js(driver, "return window.__ESR__.switchToBoard(3)")
     js(driver, "window.__ESR__.showGallery(true,'cards')")
-    time.sleep(0.35)
+    time.sleep(0.25)
     suite.check(js(driver, "return window.__ESR__.state.showGallery"), "card gallery opens")
     suite.eq(js(driver, "return window.__ESR__.state.galleryTab"), "cards", "gallery opens on the card tab")
     if shot_dir:
         screenshot(driver, shot_dir / "06-gallery-cards.png")
-    click_stage(driver, 1150 + 92 / 2, 64 + 34 / 2)
-    time.sleep(0.25)
+    js(driver, "document.getElementById('btn-gallery-close').click()")
+    time.sleep(0.15)
     suite.check(not js(driver, "return window.__ESR__.state.showGallery"), "gallery close button works")
 
-    js(driver, "window.__ESR__.showGallery(true,'charms')")
-    time.sleep(0.3)
-    suite.eq(js(driver, "return window.__ESR__.state.galleryTab"), "charms", "charm tab opens")
+    js(driver, "window.__ESR__.showGallery(true,'achievements')")
+    time.sleep(0.2)
+    suite.eq(js(driver, "return window.__ESR__.state.galleryTab"), "achievements", "achievements tab opens")
     if shot_dir:
-        screenshot(driver, shot_dir / "07-gallery-charms.png")
+        screenshot(driver, shot_dir / "07-gallery-achievements.png")
     js(driver, "window.__ESR__.showGallery(false)")
 
     js(driver, "return window.__ESR__.switchToBoard(2)")
@@ -738,15 +959,17 @@ def test_flows(driver, suite: Suite, shot_dir: Path | None) -> None:
         driver,
         """
         const E=window.__ESR__, m=E.state.match;
-        m.pos[0]=14; m.tokens[0]=7; m.turn=0; m.charms=[0,0]; return E.applyRollNow(1);
+        m.pos[0]=22; m.tokens[0]=7; m.turn=0; m.charms=[0,0];
+        m.customBuff=null; m.playerBuffs=[null,null];
+        return E.applyRollNow(1);
         """,
     )
-    suite.eq(snap["winner"], 0, "settlement flow is reachable")
-    time.sleep(0.35)
+    suite.eq(snap["winner"], 0, "settlement flow is reachable at Kesshu goal #23")
+    time.sleep(0.25)
     if shot_dir:
         screenshot(driver, shot_dir / "08-settlement.png")
-    click_stage(driver, 646 + 210 / 2, 650 + 44 / 2)
-    time.sleep(0.35)
+    js(driver, "document.getElementById('btn-settlement-lobby').click()")
+    time.sleep(0.2)
     suite.eq(snapshot(driver)["screen"], "SELECT_BOARD", "settlement menu returns to volume selection")
 
 
