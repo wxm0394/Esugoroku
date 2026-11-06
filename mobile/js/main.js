@@ -1,15 +1,16 @@
-// Main 3D Tabletop Game Controller, Step-by-Step Kinematics, DOM HUD, and E2E Surface
+// Main 3D Tabletop Game Controller, Step-by-Step Kinematics, DOM HUD, and E2E Surface (V1.1–V1.3)
 import {
   canvas, ctx, W, H, G, PLAY_BUTTONS, DICE_TRAY, TUBE_RECT, TUBE_CENTER,
   SETTLEMENT_BTNS, GALLERY_CLOSE, SIDE_CARDS, CHARM_SLOTS, START_BTN,
   SIDE_GALLERY_BTN, SIDE_BACK_BTN, currentBoard, currentHandCard,
-  isPreGameMatch, setCustomHandCard, resetMatchState,
+  isPreGameMatch, setCustomHandCard, resetMatchState, syncDerivedHudFromMatch,
+  evaluateMatchProgression, toggleCharm,
   toStageXY, isInside, nodeCenter, showToast, showStamp, spawnLandingEffect,
   unlockBoardCards, equipAllCharms, getSelectBoardRect, getGalleryCardRect,
   BOARD_RECT, saveProfile,
 } from './state.js';
 import {
-  BOARDS, UKIYOE_CARDS, CHARMS, getCardById,
+  BOARDS, UKIYOE_CARDS, CHARMS, CHARM_BY_ID, ACHIEVEMENTS, getCardById, sanitizeCharmLoadout,
 } from './boards.js';
 import { EsugorokuCore, computeDieTargetEulerYXZ, evaluateDieTopFaceYXZ } from './core.js';
 import { invalidateScene } from './board_renderer.js';
@@ -19,13 +20,19 @@ import { Tabletop3D } from './tabletop_3d.js';
 import { renderNishikieScene, create3DTileCanvas, preloadUkiyoeSheets } from './nishikie_woodblock.js';
 
 const BOARD_STATUS = [
-  ['外周16宿＋内周8宿を進み、京・八百善の上り（#24）を目指す', '名物料理は前進ジャンプ、関所は押し戻し。同じマスに止まると追突合戦で相手を2格弾き飛ばす！'],
-  ['全25格の百物語大迷宮、出目1〜6の飛び先を読んで上り（#24）へ', '青行灯が四灯消えると「百鬼夜行（飛距離2倍）」発動！同格追突で相手を2格弾き飛ばす！'],
-  ['三備え（兜・太刀・陣太鼓）を集めて御前大上り（#23）へ', '三備えを揃えるまで御前は開門しない。同じマスで一騎討ちになると相手を3格弾き＆武具印を1つ奪取！'],
-  ['外周16帖から善悪五帖ずつへ分岐し、源氏絵合の上り（#26）へ', '分岐マス（#15）で偶数は金色の善道、奇数は紫の悪道へ。物怪の引き戻しや追突合戦を制せよ！'],
+  ['外周16宿＋内周8宿を進み、京・八百善の上り（#24）を目指す', '名物三宿で旅銭を獲得し、泊や関所を旅銭・通行手形で突破。同じマスで追突合戦！'],
+  ['全25格の百物語大迷宮、出目1〜6の飛び先を読んで上り（#24）へ', '四箇所の青行灯（#4・#10・#16・#22）を全て灯すと次回の前進跳びが「百鬼夜行（2倍/3倍）」に！'],
+  ['三備え（兜・太刀・陣太鼓）を集めて御前大上り（#23）へ', '同格合戦では「猛攻・牽制・固守」の三構えを選択！三備えを揃えて御前を開門せよ！'],
+  ['外周16帖から善悪五帖ずつへ分岐し、源氏絵合の上り（#26）へ', '分岐マス（#15）で金色の雅道か紫の修羅道を主体的に選択！和歌懐紙や運命符で道中を制せよ！'],
 ];
 
 const KANJI_NUMS = ['', '壱', '弐', '参', '肆', '伍', '陸'];
+const DIFFICULTY_LABELS = {
+  easy: '初伝',
+  normal: '中伝',
+  hard: '奥伝',
+  master: '皆伝',
+};
 
 let last = 0;
 let audioUnlocked = false;
@@ -33,12 +40,19 @@ let tabletop = null;
 let galleryRendered = false;
 let lastInspectedKey = '';
 let lastHandThumbKey = '';
+let lastSettlementUnlocks = null;
 
 function unlockAudioOnce() {
   if (!audioUnlocked) {
     audioUnlocked = true;
     audio.unlock();
   }
+}
+
+function isSideControlledByHuman(side) {
+  if (!G.match) return side === 0;
+  if (G.mode === 'local2p' || G.match.mode === 'local2p') return true;
+  return side === G.match.humanSide;
 }
 
 function setStatus(text, sub) {
@@ -48,16 +62,35 @@ function setStatus(text, sub) {
 }
 
 function statusForTurn() {
-  const human = G.match?.humanSide ?? 0;
   if (!G.match || G.match.winner >= 0) return;
-  if (G.match.turn === human) {
+  if (G.match.pendingChoice) {
+    const pc = G.match.pendingChoice;
+    if (isSideControlledByHuman(pc.player)) {
+      setStatus(
+        '⚡ 戦術決断 ─ 画面中央の巻物から行動を選択してください',
+        BOARD_STATUS[G.boardIdx][1],
+      );
+    } else {
+      setStatus(
+        '同行者が戦術を選択しています…',
+        BOARD_STATUS[G.boardIdx][1],
+      );
+    }
+    return;
+  }
+  const turnSide = G.match.turn;
+  if (isSideControlledByHuman(turnSide)) {
+    const who = (G.mode === 'local2p' || G.match.mode === 'local2p')
+      ? (turnSide === 0 ? '先手（あなた）の番です' : '後手（二人目）の番です')
+      : 'あなたの番です';
     setStatus(
-      'あなたの番です ─ 下の「🎲 賽を振る (Space)」または3D賽碗をクリックして骨骰を投げてください',
+      `${who} ─ 下の「🎲 賽を振る (Space)」または3D賽碗をクリックして骨骰を投げてください`,
       `盤上の ①〜⑥ マーカーは出目1〜6の着地予測です · ${BOARD_STATUS[G.boardIdx][1]}`,
     );
   } else {
+    const diffLabel = DIFFICULTY_LABELS[G.aiDifficulty] || '中伝';
     setStatus(
-      '同行者（相手）の手番 ─ 相手が骨骰を振っています…',
+      `同行者（AI・${diffLabel}）の手番 ─ 相手が戦術を練り、公平な骨骰を振っています…`,
       BOARD_STATUS[G.boardIdx][1],
     );
   }
@@ -97,17 +130,19 @@ function describeNodeRule(board, node) {
   }
   if (board.id === 'yokai' && node.jumpTable) {
     const jumps = node.jumpTable.map((d, idx) => `${idx + 1}点→${d >= 0 ? '+' + d : d}格`).join(' / ');
-    return `【飛び双六マス】${node.rule || ''} （出目ごとの移動: ${jumps}）`;
+    const lanternTag = node.lanternBit ? '🏮【青行灯マス】止まると自分の青行灯が1灯点ります！ ' : '';
+    return `${lanternTag}【飛び双六マス】${node.rule || ''} （出目ごとの移動: ${jumps}）`;
   }
   if (node.kind === 'jump') {
     const d = node.jumpTable ? node.jumpTable[0] : 2;
-    return `【名物跳びマス】止まると名物の力でさらに ${d >= 0 ? '+' + d : d} 格ジャンプします！（${node.rule || ''}）`;
+    const gourmetTag = node.gourmetBit ? '🍱【名物宿】初回到達で名物印＋旅銭1枚獲得！ ' : '';
+    return `${gourmetTag}【名物跳びマス】止まると名物の力でさらに ${d >= 0 ? '+' + d : d} 格ジャンプします！（${node.rule || ''}）`;
   }
   if (node.kind === 'stay') {
-    return `【宿場泊マス】止まると本来は1回休みですが、「宿場守り」護符があれば自動で休みを無効化します！`;
+    return `【宿場泊マス】止まると本来は1回休みですが、「宿場守り」護符または東海道の「旅銭」で休みを無効化できます！`;
   }
   if (node.kind === 'branch') {
-    return `【善悪分岐マス】次の出目が偶数（2・4・6）なら金色の善道、奇数（1・3・5）なら紫の悪道へ分岐します。`;
+    return `【善悪分岐マス】到達または通過時に金色の「雅道（善）」か紫の「修羅道（悪）」を主体的に選択できます！`;
   }
   if (node.tokens) {
     return `【討入備えマス】止まると御前上りに必要な武具印「${node.rule || '備え'}」を獲得します！`;
@@ -115,15 +150,280 @@ function describeNodeRule(board, node) {
   return `【道中マス】${node.rule || '次の宿場へ着実に駒を進めます。'}`;
 }
 
+function renderCharmStripSlots(board, human) {
+  const loadout = G.match?.charmLoadout?.[human] || sanitizeCharmLoadout(G.charms);
+  const usedMask = G.match?.charmUsed?.[human] ?? G.match?.charmsUsed?.[human] ?? 0;
+  const cdMap = G.match?.charmCooldown?.[human] || {};
+
+  for (let i = 0; i < 3; i++) {
+    const slotEl = document.getElementById(`charm-slot-${i}`);
+    if (!slotEl) continue;
+    const cid = loadout[i] || CHARMS[i].id;
+    const def = CHARM_BY_ID[cid] || CHARMS[i];
+    const used = (usedMask & def.bit) !== 0;
+    const cd = cdMap[cid] || 0;
+    const canActivelyUse = G.screen === 'PLAYING'
+      && G.phase === 'ROLL'
+      && isSideControlledByHuman(G.match?.turn ?? 0)
+      && G.match?.turn === human
+      && !used
+      && (
+        (cid === 'wind' && !G.match?.windActive?.[human])
+        || (cid === 'purify' && ((G.match?.skip?.[human] || 0) > 0 || (G.match?.boardState?.genji?.grudgeMarks?.[human] || 0) > 0))
+        || (cid === 'waka_slip' && board.id === 'genji')
+      );
+
+    slotEl.dataset.charm = cid;
+    slotEl.dataset.slotIndex = String(i);
+    slotEl.classList.toggle('active', !used);
+    slotEl.classList.toggle('activatable', Boolean(canActivelyUse));
+
+    const sealEl = slotEl.querySelector('.charm-seal');
+    const copyEl = slotEl.querySelector('.charm-copy');
+    if (sealEl) sealEl.textContent = def.icon || def.name.slice(0, 1);
+    if (copyEl) {
+      let stateTag = '';
+      if (used) {
+        stateTag = def.oncePerMatch ? '（使用済）' : `（充填あと${cd}手）`;
+      } else if (canActivelyUse) {
+        stateTag = '（クリックで発動）';
+      }
+      copyEl.innerHTML = `<strong>${def.name}${stateTag}</strong><small>${def.effect}</small>`;
+    }
+  }
+}
+
+function renderTacticalChoiceModal() {
+  const modal = document.getElementById('tactical-choice-modal');
+  if (!modal) return;
+  const pc = G.match?.pendingChoice;
+  const showForHuman = G.screen === 'PLAYING'
+    && pc
+    && isSideControlledByHuman(pc.player)
+    && G.match?.winner < 0;
+
+  modal.classList.toggle('hidden', !showForHuman);
+  if (!showForHuman) return;
+
+  const board = currentBoard();
+  const sealEl = document.getElementById('choice-modal-seal');
+  const titleEl = document.getElementById('choice-modal-title');
+  const subEl = document.getElementById('choice-modal-sub');
+  const bodyEl = document.getElementById('choice-modal-options');
+  if (!bodyEl) return;
+  bodyEl.innerHTML = '';
+
+  const usedMask = G.match?.charmUsed?.[pc.player] ?? 0;
+  const loadout = G.match?.charmLoadout?.[pc.player] || [];
+  const canReroll = loadout.includes('reroll')
+    && (usedMask & (CHARM_BY_ID.reroll?.bit || 0)) === 0
+    && (G.match?.rerollsUsedThisTurn || 0) < 1;
+
+  if (pc.type === 'kesshu_stance') {
+    if (sealEl) sealEl.textContent = '戦';
+    if (titleEl) titleEl.textContent = `一騎討ち戦術選択（#${pc.square} ${board.nodes[pc.square]?.title || ''}）`;
+    if (subEl) subEl.textContent = '相手と同じマスに踏み込みました！合戦の構えを選んでください。';
+
+    const stances = [
+      {
+        stance: 'assault',
+        badge: '猛 攻',
+        title: '⚔️ 猛攻の構え（突撃）',
+        desc: '相手を3格（荒武者Buff・太刀所持でさらに強化）弾き飛ばし、自分が未所持の武具印を1つ奪取します！',
+      },
+      {
+        stance: 'feint',
+        badge: '牽 制',
+        title: '🛡️ 牽制の構え（奇襲＆護り）',
+        desc: '相手を1格押し戻しつつ、自身に「一時鉄壁（次の被追突・奇襲を軽減）」を付与します。',
+      },
+      {
+        stance: 'defend',
+        badge: '固 守',
+        title: '🏯 固守の構え（武具死守）',
+        desc: '相手を押し戻さない代わりに、自身に「一時鉄壁」を張り、所持している三備えを確実に守ります。',
+      },
+    ];
+
+    stances.forEach(item => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tactical-choice-btn';
+      btn.dataset.choiceType = 'kesshu_stance';
+      btn.dataset.stance = item.stance;
+      btn.innerHTML = `<span class="choice-badge">${item.badge}</span><div class="choice-copy"><strong>${item.title}</strong><span>${item.desc}</span></div>`;
+      btn.addEventListener('click', () => {
+        unlockAudioOnce();
+        audio.select();
+        submitTacticalChoice({ type: 'kesshu_stance', stance: item.stance });
+      });
+      bodyEl.appendChild(btn);
+    });
+  } else if (pc.type === 'tokaido_coin') {
+    const coins = G.match?.boardState?.tokaido?.coins?.[pc.player] || 0;
+    const isStay = pc.reason === 'stay';
+    if (sealEl) sealEl.textContent = '銭';
+    if (titleEl) {
+      titleEl.textContent = isStay
+        ? `宿場泊の賄い選択（所持旅銭: ${coins}枚）`
+        : `関所手形の通行選択（所持旅銭: ${coins}枚）`;
+    }
+    if (subEl) {
+      subEl.textContent = isStay
+        ? '名物宿で得た「旅銭」を1枚支払うと、今回の宿場泊（休み）を即座に免除できます。'
+        : `「旅銭」を1枚支払うと、関所の押し戻し（${pc.delta}格）を無効化してそのまま留まれます。`;
+    }
+
+    const opts = [
+      {
+        spendCoin: true,
+        badge: '旅銭消費',
+        title: '🪙 旅銭を1枚支払って突破する',
+        desc: isStay ? '旅銭を1枚使い、宿場泊の1回休みを無効化します。' : '旅銭を1枚使い、関所の押し戻しを無効化します。',
+      },
+      {
+        spendCoin: false,
+        badge: '温 存',
+        title: '🏮 旅銭を温存して通常の効果を受ける',
+        desc: isStay ? '旅銭を残し、この宿場で一休みします。' : `旅銭を残し、#${pc.RetreatTo} へ引き返します。`,
+      },
+    ];
+
+    opts.forEach(item => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tactical-choice-btn';
+      btn.dataset.choiceType = 'tokaido_coin';
+      btn.dataset.spendCoin = String(item.spendCoin);
+      btn.innerHTML = `<span class="choice-badge">${item.badge}</span><div class="choice-copy"><strong>${item.title}</strong><span>${item.desc}</span></div>`;
+      btn.addEventListener('click', () => {
+        unlockAudioOnce();
+        audio.select();
+        submitTacticalChoice({ type: 'tokaido_coin', spendCoin: item.spendCoin });
+      });
+      bodyEl.appendChild(btn);
+    });
+  } else if (pc.type === 'genji_branch') {
+    if (sealEl) sealEl.textContent = '岐';
+    if (titleEl) titleEl.textContent = '源氏絵合・善悪二道の選択（#15 関屋）';
+    if (subEl) subEl.textContent = '関屋の分岐点に到達しました。金色の「雅道（善）」か紫の「修羅道（悪）」を選んでください。';
+
+    const routes = [
+      {
+        route: 'good',
+        badge: '雅道（善）',
+        title: '🌸 金色の「雅道（善道）」へ進む',
+        desc: '胡蝶の舞など前進跳びが多く、穏やかに上り（#26）へ近づく王道ルートです（善悪天平＋）。',
+      },
+      {
+        route: 'evil',
+        badge: '修羅（悪）',
+        title: '🌑 紫の「修羅道（悪道）」へ進む',
+        desc: '物怪の試練や浮舟の急流跳び（+3格）が待ち受ける波乱の奇襲ルートです（善悪天平−）。',
+      },
+    ];
+
+    routes.forEach(item => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tactical-choice-btn';
+      btn.dataset.choiceType = 'genji_branch';
+      btn.dataset.route = item.route;
+      btn.innerHTML = `<span class="choice-badge">${item.badge}</span><div class="choice-copy"><strong>${item.title}</strong><span>${item.desc}</span></div>`;
+      btn.addEventListener('click', () => {
+        unlockAudioOnce();
+        audio.select();
+        submitTacticalChoice({ type: 'genji_branch', route: item.route });
+      });
+      bodyEl.appendChild(btn);
+    });
+  }
+
+  if (canReroll) {
+    const rerollBtn = document.createElement('button');
+    rerollBtn.type = 'button';
+    rerollBtn.className = 'tactical-choice-btn';
+    rerollBtn.dataset.choiceType = 'charm_reroll';
+    rerollBtn.innerHTML = `<span class="choice-badge">重抽符</span><div class="choice-copy"><strong>🎲 懐中護符「重抽符」で賽を振り直す（1局1回）</strong><span>現在の出目結果を破棄し、手番を巻き戻してもう一度賽を振ります。</span></div>`;
+    rerollBtn.addEventListener('click', () => {
+      unlockAudioOnce();
+      audio.charm();
+      triggerRerollCharm();
+    });
+    bodyEl.appendChild(rerollBtn);
+  }
+}
+
+function renderCharmPickerDOM() {
+  const modal = document.getElementById('charm-picker-modal');
+  if (!modal) return;
+  const subEl = document.getElementById('charm-modal-subtitle');
+  const pillEl = document.getElementById('charm-phase-pill');
+  const grid = document.getElementById('charm-picker-grid');
+  if (!grid) return;
+
+  const preGame = isPreGameMatch();
+  const equipped = sanitizeCharmLoadout(G.charms);
+  if (subEl) {
+    subEl.textContent = `現在装備中: ${equipped.map(id => CHARM_BY_ID[id]?.name || id).join(' ・ ')} （${equipped.length} / 3 枚）`;
+  }
+  if (pillEl) {
+    pillEl.textContent = preGame ? '✨ 開幕前・選択すると即時適用' : '⏳ 対局進行中・次局から適用';
+  }
+
+  grid.innerHTML = '';
+  CHARMS.forEach(charm => {
+    const isEq = equipped.includes(charm.id);
+    const card = document.createElement('div');
+    card.className = `charm-picker-card${isEq ? ' equipped' : ''}`;
+    card.dataset.charmId = charm.id;
+    card.innerHTML = `
+      <div class="charm-picker-head">
+        <span class="charm-seal">${charm.icon || charm.name.slice(0, 1)}</span>
+        <div>
+          <strong>${charm.name}</strong>
+          <small>${charm.category === 'board' ? '巻専用護符' : charm.trigger === 'active' ? '主動発動' : '自動発動'} · 再充填${charm.oncePerMatch ? '不可(1局1回)' : charm.cooldown + '手'}</small>
+        </div>
+      </div>
+      <p class="charm-picker-desc">${charm.effect}</p>
+      <button type="button" class="card-equip-btn${isEq ? ' equipped' : ''}">
+        ${isEq ? '✓ 装備中（クリックで他と入替）' : '🛡️ この護符を懐中に帯びる'}
+      </button>
+    `;
+    card.addEventListener('click', () => {
+      unlockAudioOnce();
+      audio.select();
+      toggleCharm(charm.id);
+      if (isPreGameMatch()) {
+        resetMatchState();
+        invalidateScene();
+      }
+      syncHudDOM();
+    });
+    grid.appendChild(card);
+  });
+}
+
 function syncHudDOM() {
   const board = currentBoard();
   if (!board) return;
+
+  if (G.match) {
+    syncDerivedHudFromMatch(G.match);
+  }
 
   // Topbar active board tab & BGM theme sync
   document.querySelectorAll('.nav-link[data-board]').forEach(btn => {
     btn.classList.toggle('active', Number(btn.dataset.board) === G.boardIdx);
   });
   audio.setBgmBoard(board.id);
+
+  // Sync AI difficulty select in topbar
+  const diffSelect = document.getElementById('select-ai-difficulty');
+  if (diffSelect) {
+    const val = G.mode === 'local2p' ? 'local2p' : (G.aiDifficulty || 'normal');
+    if (diffSelect.value !== val) diffSelect.value = val;
+  }
 
   // Sync Topbar BGM & SFX buttons in .hud-top-stack independently
   const bgmBtn = document.getElementById('btn-bgm');
@@ -148,13 +448,16 @@ function syncHudDOM() {
   const mainEl = document.getElementById('coach-main');
   const subEl = document.getElementById('coach-sub');
   if (badgeEl && mainEl && subEl) {
-    const isHumanTurn = G.match && G.match.turn === G.match.humanSide;
+    const isHumanTurn = G.match && isSideControlledByHuman(G.match.turn);
     if (G.phase === 'ANIM') {
       badgeEl.textContent = '🎲 投骰中';
       badgeEl.style.background = '#c4922f';
     } else if (G.phase === 'MOVE') {
       badgeEl.textContent = '🏃 駒移動中';
       badgeEl.style.background = '#2b6e52';
+    } else if (G.match?.pendingChoice) {
+      badgeEl.textContent = '⚡ 戦術決断';
+      badgeEl.style.background = '#8e2a59';
     } else if (isHumanTurn) {
       badgeEl.textContent = 'あなたの手番';
       badgeEl.style.background = '#bf3426';
@@ -203,15 +506,19 @@ function syncHudDOM() {
     if (meterEl) {
       const remain = Math.max(0, board.goal - G.match.pos[human]);
       const duels = G.match.duelCount || G.stats.duels || 0;
+      const plyText = `手数 ${G.match.ply || 0}/${G.match.maxPly || 80}`;
       if (board.id === 'tokaido') {
-        meterEl.textContent = `🍱 名物: ${G.tokaidoGourmet.length}/3 · ⚔️ 追突合戦: ${duels}回 · 上り(#${board.goal})まで残り ${remain} 格`;
+        const coins = G.match.boardState?.tokaido?.coins?.[human] || 0;
+        meterEl.textContent = `🍱 名物: ${G.tokaidoGourmet.length}/3 · 🪙 旅銭: ${coins}枚 · ⚔️ 追突: ${duels}回 · 残り${remain}格 (${plyText})`;
       } else if (board.id === 'yokai') {
-        meterEl.textContent = `🏮 青行灯: ${G.yokaiLanterns}/4灯 ${G.yokaiFrenzy ? '【百鬼夜行2倍！】' : ''} · ⚔️ 追突: ${duels}回 · 残り ${remain} 格`;
+        const lit = 4 - G.yokaiLanterns;
+        meterEl.textContent = `🏮 青行灯: ${lit}/4灯点灯 ${G.yokaiFrenzy ? '【百鬼夜行待機！】' : ''} · ⚔️ 追突: ${duels}回 · 残り${remain}格 (${plyText})`;
       } else if (board.id === 'kesshu') {
-        meterEl.textContent = `⚔️ 討入備え: ${G.kesshuPieces}/3 獲得 · 一騎討ち: ${duels}回 · 上り(#${board.goal})まで残り ${remain} 格`;
+        const shield = G.match.boardState?.kesshu?.tempShield?.[human] ? '🛡️鉄壁 ' : '';
+        meterEl.textContent = `⚔️ 討入備え: ${G.kesshuPieces}/3 ${shield}· 一騎討ち: ${duels}回 · 残り${remain}格 (${plyText})`;
       } else {
-        const mood = G.genjiBalance >= 0 ? '善道寄り（金）' : '悪道寄り（紫）';
-        meterEl.textContent = `☯️ 天平: ${mood} · ⚔️ 追突: ${duels}回 · 上り(#${board.goal})まで残り ${remain} 格`;
+        const mood = G.genjiBalance > 0 ? `雅道(+${G.genjiBalance})` : G.genjiBalance < 0 ? `修羅(${G.genjiBalance})` : '中庸(0)';
+        meterEl.textContent = `☯️ 天平: ${mood} · ⚔️ 追突: ${duels}回 · 残り${remain}格 (${plyText})`;
       }
     }
 
@@ -231,12 +538,12 @@ function syncHudDOM() {
       const kindNames = {
         start: '振出・起点',
         goal: '大上り・終着',
-        jump: (inspNode.jumpTable?.[0] || 0) < 0 ? '関所・奇襲' : '名物跳び',
+        jump: (inspNode.jumpTable?.[0] || 0) < 0 ? '関所・奇襲' : (inspNode.gourmetBit ? '名物宿・跳び' : '名物跳び'),
         stay: '宿場泊',
         branch: '善悪分岐',
         good: '善玉雅道',
         evil: '悪玉修羅道',
-        normal: inspNode.tokens ? '討入備え' : '道中宿場',
+        normal: inspNode.tokens ? '討入備え' : inspNode.lanternBit ? '青行灯マス' : '道中宿場',
       };
       inspKind.textContent = kindNames[inspNode.kind] || '道中';
     }
@@ -251,16 +558,8 @@ function syncHudDOM() {
       renderNishikieScene(g, board.id, inspNode, artCanvas.width, artCanvas.height);
     }
 
-    // Pocket talisman active state (supports both charmUsed and charmsUsed)
-    const usedMask = G.match.charmUsed?.[human] ?? G.match.charmsUsed?.[human] ?? 0;
-    const charmBits = { stay: 1, guard: 2, dash: 4 };
-    document.querySelectorAll('.charm-item').forEach(el => {
-      const cid = el.dataset.charm;
-      if (cid === 'custom') return;
-      const equipped = G.charms.includes(cid);
-      const used = (usedMask & (charmBits[cid] || 0)) !== 0;
-      el.classList.toggle('active', equipped && !used);
-    });
+    // Render dynamic 3 equipped charms from the 12-charm pool
+    renderCharmStripSlots(board, human);
 
     // 4th Slot: Custom Hand Card (自定义手札) in bottom .charm-strip
     const handCard = currentHandCard();
@@ -297,17 +596,22 @@ function syncHudDOM() {
     const lobbyHandDesc = document.getElementById('lobby-hand-card-desc');
     if (handCard && handCard.buff) {
       if (lobbyHandName) lobbyHandName.textContent = `${handCard.title}（${handCard.buff.name}）`;
-      if (lobbyHandDesc) lobbyHandDesc.textContent = handCard.buff.shortDesc;
+      if (lobbyHandDesc) lobbyHandDesc.textContent = `${handCard.buff.shortDesc} · 護符: ${sanitizeCharmLoadout(G.charms).map(id => CHARM_BY_ID[id]?.name).join(' / ')}`;
     }
 
-    // Tactical Gale Strike Button state
+    // Tactical Gale Strike Button state (uses unified EsugorokuCore.canUseTacticalStrike)
     const strikeBtn = document.getElementById('btn-strike');
     const strikeSub = document.getElementById('strike-sub-text');
     if (strikeBtn && strikeSub) {
-      const cd = G.match.strikeCooldown?.[human] || 0;
-      const oppPos = G.match.pos[ai] || 0;
-      const pullDist = 2 + (G.match.customBuff?.strikePullBonus || 0);
-      const canStrike = G.screen === 'PLAYING' && G.phase === 'ROLL' && humanTurn && G.match.winner < 0 && cd === 0 && oppPos > 0;
+      const activeSide = G.match.turn;
+      const oppSide = 1 - activeSide;
+      const cd = G.match.strikeCooldown?.[activeSide] || 0;
+      const oppPos = G.match.pos[oppSide] || 0;
+      const pullDist = 2 + (G.match.playerBuffs?.[activeSide]?.strikePullBonus || G.match.customBuff?.strikePullBonus || 0);
+      const canStrike = G.screen === 'PLAYING'
+        && G.phase === 'ROLL'
+        && isSideControlledByHuman(activeSide)
+        && EsugorokuCore.canUseTacticalStrike(board, G.match, activeSide);
       strikeBtn.disabled = !canStrike;
       if (cd > 0) {
         strikeSub.textContent = `再充填あと${cd}手`;
@@ -321,7 +625,11 @@ function syncHudDOM() {
     // Roll button state
     const rollBtn = document.getElementById('btn-roll');
     if (rollBtn) {
-      const canRoll = G.screen === 'PLAYING' && G.phase === 'ROLL' && G.match.turn === human && G.match.winner < 0;
+      const canRoll = G.screen === 'PLAYING'
+        && G.phase === 'ROLL'
+        && !G.match.pendingChoice
+        && isSideControlledByHuman(G.match.turn)
+        && G.match.winner < 0;
       rollBtn.disabled = !canRoll;
       const mainSpan = rollBtn.querySelector('.roll-cta-main');
       const subSpan = rollBtn.querySelector('.roll-cta-sub');
@@ -332,9 +640,12 @@ function syncHudDOM() {
         } else if (G.phase === 'MOVE') {
           mainSpan.textContent = '🏃 駒が進んでいます…';
           subSpan.textContent = '一歩ずつ宿場を跳び進みます';
-        } else if (!humanTurn) {
+        } else if (G.match.pendingChoice) {
+          mainSpan.textContent = '⚡ 戦術を選択中…';
+          subSpan.textContent = '中央の巻物から決断を下してください';
+        } else if (!isSideControlledByHuman(G.match.turn)) {
           mainSpan.textContent = '⏳ 相手の手番中';
-          subSpan.textContent = '同行者が賽を振っています';
+          subSpan.textContent = '同行者が公平な賽を振っています';
         } else {
           mainSpan.textContent = '🎲 賽を振る (Space)';
           subSpan.textContent = '碗に骨骰を投げて進む';
@@ -344,6 +655,7 @@ function syncHudDOM() {
   }
 
   renderDieFaceDOM(G.diceValue || 1);
+  renderTacticalChoiceModal();
 
   // Event toast banner
   const toastEl = document.getElementById('event-toast');
@@ -369,15 +681,38 @@ function syncHudDOM() {
       const seal = document.getElementById('settlement-seal');
       const title = document.getElementById('settlement-title');
       const sub = document.getElementById('settlement-sub');
+      const reasonBadge = document.getElementById('settlement-reason-badge');
+      const unlocksBox = document.getElementById('settlement-unlocks');
       if (seal) {
         seal.textContent = humanWon ? '祝' : '終';
         seal.style.background = humanWon ? '#bf3426' : '#2a3b4c';
+      }
+      if (reasonBadge) {
+        reasonBadge.textContent = G.match.resultReason === 'max_ply'
+          ? `⏱️ 規定手数（${G.match.maxPly || 80}手）到達による盤面優勢判定`
+          : '🏁 大上り（終着）到達による決着';
       }
       if (title) title.textContent = humanWon ? '見事、大上り達成！' : '惜敗 ─ 同行者が先に上りました';
       if (sub) {
         sub.textContent = humanWon
           ? `「${board.title}」を踏破し、見事に一番乗りを果たしました！`
-          : `次は懐中護符と飛びマスを活かして雪辱を果たしましょう。`;
+          : `次は12種の懐中護符と戦術選択を活かして雪辱を果たしましょう。`;
+      }
+      if (unlocksBox) {
+        const uCards = lastSettlementUnlocks?.newlyUnlockedCards || [];
+        const uAchs = lastSettlementUnlocks?.newlyUnlockedAchievements || [];
+        if (uCards.length || uAchs.length) {
+          const cardNames = uCards.map(id => getCardById(id)?.title || id).join(' / ');
+          const achNames = uAchs.map(id => ACHIEVEMENTS.find(a => a.id === id)?.title || id).join(' / ');
+          unlocksBox.innerHTML = [
+            uCards.length ? `<div>🖼️ 新規開帳錦絵: <strong>${cardNames}</strong></div>` : '',
+            uAchs.length ? `<div>🏅 達成称号: <strong>${achNames}</strong></div>` : '',
+          ].join('');
+          unlocksBox.classList.remove('hidden');
+        } else {
+          unlocksBox.innerHTML = `<div>📜 蒐集済み錦絵: ${G.collection.size} / ${UKIYOE_CARDS.length} 枚</div>`;
+          unlocksBox.classList.remove('hidden');
+        }
       }
     }
   }
@@ -401,13 +736,20 @@ function syncHudDOM() {
     handModal.classList.toggle('hidden', !G.showHandPicker);
     if (G.showHandPicker) renderHandCardPickerDOM();
   }
+
+  // 12-Charm Picker modal sync with G.showCharmPicker
+  const charmModal = document.getElementById('charm-picker-modal');
+  if (charmModal) {
+    charmModal.classList.toggle('hidden', !G.showCharmPicker);
+    if (G.showCharmPicker) renderCharmPickerDOM();
+  }
 }
 
 function equipCustomHandCard(cardId, options = {}) {
   const card = getCardById(cardId);
   if (!card) return { ok: false, reason: 'invalid_card' };
   if (!G.collection.has(card.id) && !options.allowUncollected) {
-    showToast('🔒 この錦絵はまだ開帳（蒐集）されていません', '対応する画帖を遊ぶと図鑑に開帳されます');
+    showToast('🔒 この錦絵はまだ開帳（蒐集）されていません', '対局完走やAI撃破・巻別目標の達成で開帳されます');
     return { ok: false, reason: 'not_collected' };
   }
 
@@ -483,7 +825,6 @@ function renderHandCardPickerDOM() {
 
   const filter = G.handPickerFilter || 'all';
   const cards = UKIYOE_CARDS.filter(c => filter === 'all' || String(c.board) === String(filter));
-  // Sort collected cards first so players immediately see selectable cards
   cards.sort((a, b) => {
     const aCol = G.collection.has(a.id) ? 1 : 0;
     const bCol = G.collection.has(b.id) ? 1 : 0;
@@ -520,7 +861,7 @@ function renderHandCardPickerDOM() {
     btn.dataset.equipCard = card.id;
     if (!collected) {
       btn.disabled = true;
-      btn.textContent = '🔒 未開帳（該当画帖を遊んで解放）';
+      btn.textContent = `🔒 未開帳（${card.unlockCondition?.label || '対局達成で解放'}）`;
     } else if (isEquipped) {
       btn.textContent = preGame ? '✓ 懐中手札に装備中（初期Buff発動）' : '✓ 懐中手札に装備中';
     } else {
@@ -547,7 +888,7 @@ function renderHandCardPickerDOM() {
 function renderGalleryDOM() {
   const countLabel = document.getElementById('gallery-count-label');
   if (countLabel) {
-    countLabel.textContent = `蒐集状況: ${G.collection.size} / ${UKIYOE_CARDS.length} 枚 開帳済み · 開帳済みの錦絵は「自定义手札（初期Buff）」として装備できます`;
+    countLabel.textContent = `蒐集状況: ${G.collection.size} / ${UKIYOE_CARDS.length} 枚 開帳済み · 達成称号: ${G.achievements.size} / ${ACHIEVEMENTS.length} · 開帳済みの錦絵は「自定义手札（初期Buff）」として装備できます`;
   }
   if (galleryRendered) return;
   const grid = document.getElementById('gallery-grid');
@@ -583,7 +924,7 @@ function renderGalleryDOM() {
     btn.dataset.galleryEquip = card.id;
     if (!collected) {
       btn.disabled = true;
-      btn.textContent = '🔒 未開帳';
+      btn.textContent = `🔒 未開帳（${card.unlockCondition?.label || '対局で解放'}）`;
     } else if (isEquipped) {
       btn.textContent = '✓ 自定义手札に装備中';
     } else {
@@ -616,12 +957,11 @@ function openSide(index) {
 function beginMatch() {
   G.screen = 'PLAYING';
   G.showGallery = false;
+  lastSettlementUnlocks = null;
   resetMatchState();
-  const board = currentBoard();
-  unlockBoardCards(G.boardIdx);
   invalidateScene();
   audio.paper();
-  G.aiTimer = G.match.turn === G.humanSide ? 0 : 1.0;
+  G.aiTimer = isSideControlledByHuman(G.match.turn) ? 0 : 1.0;
   G.phase = 'ROLL';
   G.match.winner = -1;
   statusForTurn();
@@ -637,20 +977,6 @@ function backToSelect() {
   syncHudDOM();
 }
 
-function syncBoardStats() {
-  const board = currentBoard();
-  if (!G.match) return;
-  const human = G.match.humanSide;
-  const tokens = G.match.tokens[human] || 0;
-  G.kesshuPieces = [1, 2, 4].filter(m => tokens & m).length;
-  const node = board.nodes[G.match.pos[human]];
-  if (board.id === 'genji' && node) {
-    if (node.kind === 'good') G.genjiBalance = Math.min(1, (G.genjiBalance || 0) + 0.45);
-    else if (node.kind === 'evil') G.genjiBalance = Math.max(-1, (G.genjiBalance || 0) - 0.45);
-    else G.genjiBalance *= 0.96;
-  }
-}
-
 function handleEvents(result, roll) {
   const board = currentBoard();
   const human = G.match.humanSide;
@@ -658,7 +984,6 @@ function handleEvents(result, roll) {
   const finalPos = result.state.pos[mover];
   const node = board.nodes[finalPos];
   let usedJump = false;
-  let usedBounce = false;
 
   for (const ev of result.events) {
     if (ev.type === 'jump') {
@@ -667,7 +992,6 @@ function handleEvents(result, roll) {
       audio.jump();
       showToast(`⚡ 名物跳び！ ${board.nodes[ev.from]?.title || ''} → ${board.nodes[ev.to]?.title || ''}`, `出目 ${roll} の跳躍効果`);
     } else if (ev.type === 'bounce') {
-      usedBounce = true;
       audio.bounce(1.2);
       showToast('↩️ 上りを超過 ─ 点点一致のため折り返し', 'ぴったり止まると大上り達成');
     } else if (ev.type === 'token') {
@@ -677,29 +1001,47 @@ function handleEvents(result, roll) {
     } else if (ev.type === 'stay') {
       audio.stay();
       showToast(`🏮 宿場泊 ─ ${ev.turns} 手休み`, board.nodes[ev.to]?.title || '');
+    } else if (ev.type === 'gourmet') {
+      audio.token();
+      showStamp('宿場名物', `${board.nodes[ev.square]?.title || '名物'}＋旅銭1枚`);
+      showToast(`🍱 宿場名物「${board.nodes[ev.square]?.title || ''}」を堪能！旅銭＋1枚（計${ev.coins}枚）`, '旅銭は宿場泊や関所の突破に使えます');
+    } else if (ev.type === 'coin_spent') {
+      audio.charm();
+      showToast(`🪙 旅銭を1枚支払い、${ev.reason === 'stay' ? '宿場泊' : '関所の押し戻し'}を突破！（残り${ev.coinsLeft}枚）`, '東海道・旅銭の知恵');
+    } else if (ev.type === 'lantern') {
+      audio.lantern();
+      const litCount = [1, 2, 4, 8].filter(b => (ev.mask & b) !== 0).length;
+      showToast(`🏮 青行灯マス（#${ev.square}）を点灯！（${litCount} / 4 灯）`, '四灯すべて灯すと次回の前進跳びが百鬼夜行（2倍/3倍）に！');
+    } else if (ev.type === 'frenzy_ready') {
+      audio.lantern();
+      showStamp('百鬼夜行', '次回の前進怪異跳びが倍化！');
+      showToast('🏮 四つの青行灯が揃った！「百鬼夜行」待機状態に突入！', '次回の前進ジャンプ距離が2倍（青行灯護符なら3倍）になります！');
+    } else if (ev.type === 'frenzy_used') {
+      audio.jump();
+      showStamp('百鬼夜行発動', `飛距離 ${ev.multiplier} 倍！`);
+      showToast(`👹 百鬼夜行発動！怪異跳びが ${ev.multiplier} 倍に増幅された！`, '四灯の妖力が解放されました');
     } else if (ev.type === 'duel') {
       G.stats.duels++;
       audio.duel();
-      const pushSteps = ev.pushSteps || 2;
+      const pushSteps = ev.pushSteps ?? 2;
+      const stanceLabels = { assault: '猛攻', feint: '牽制', defend: '固守' };
+      const stName = stanceLabels[ev.stance] || '追突';
       if (ev.stolenBit) {
         const stolenName = ev.stolenBit === 1 ? '兜' : ev.stolenBit === 2 ? '太刀' : '陣太鼓';
-        showStamp('武具奪取', `${stolenName}を奪い取った！`);
-        showToast(`⚔️ 一騎討ち勝利！相手を ${pushSteps} 格弾き飛ばし「${stolenName}」を奪取！`, '白熱の合戦攻防');
+        showStamp('武具奪取', `【${stName}】${stolenName}を奪取！`);
+        showToast(`⚔️ 一騎討ち【${stName}】勝利！相手を ${pushSteps} 格弾き飛ばし「${stolenName}」を奪取！`, '白熱の合戦攻防');
       } else {
-        showToast(`⚔️ 同格追突・合戦！相手を ${pushSteps} 格後ろへ弾き飛ばした！`, '道中の攻防拉鋸');
+        showToast(`⚔️ 同格合戦【${stName}】！相手を ${pushSteps} 格後ろへ弾き飛ばした！`, '道中の攻防拉鋸');
       }
     } else if (ev.type === 'recharge') {
       audio.charm();
-      showToast('✨ 懐中護符の霊力が再充填されました！', '再び泊休みや戻り跳びを防げます');
+      showToast('✨ 懐中護符の霊力が再充填されました！', '再び護符の加護を発動できます');
     } else if (ev.type === 'charm') {
       audio.charm();
+      const cDef = CHARM_BY_ID[ev.charm];
       showToast(
-        ev.charm === 'stay'
-          ? '🛡️ 懐中護符「宿場守り」が泊休みを無効化！'
-          : ev.charm === 'guard'
-            ? '🛡️ 懐中護符「妖怪・関所封じ」が戻り跳びを封じた！'
-            : '⚡ 懐中護符「早駕籠」が出目を＋1歩加速！',
-        '懐中守り札が自動発動（4ラウンド後に再充填）',
+        `🛡️ 懐中護符「${cDef?.name || ev.charm}」が発動！`,
+        cDef?.effect || '懐中守り札の加護',
       );
     } else if (ev.type === 'custom_buff') {
       audio.charm();
@@ -715,11 +1057,14 @@ function handleEvents(result, roll) {
       showStamp('御前返し', `備え ${ev.required} 枚が必要`);
       showToast('🔒 御前の上りはまだ開かない！', '先に兜・太刀・陣太鼓を三つ揃えよう');
     } else if (ev.type === 'branch_good') {
-      showToast('✨ 偶数の目 ─ 金色の「善道」へ進む！', '近道ルートへ入りました');
+      showToast('🌸 金色の「雅道（善道）」へ進む！', '近道・前進ルートへ入りました');
     } else if (ev.type === 'branch_evil') {
-      showToast('🌑 奇数の目 ─ 紫の「悪道」へ進む', '足止めルートへ入りました');
+      showToast('🌑 紫の「修羅道（悪道）」へ進む！', '波乱の奇襲ルートへ入りました');
     } else if (ev.type === 'skip') {
       showToast('🏮 宿場泊のためこの手番は一休み', '次の手番から再開します');
+    } else if (ev.type === 'timeout') {
+      showStamp('規定手数到達', '盤面優勢判定');
+      showToast('⏱️ 規定手数（maxPly）に到達！盤面進行度により勝敗が決しました', '長期戦の決着');
     }
   }
 
@@ -729,41 +1074,22 @@ function handleEvents(result, roll) {
     if (tabletop) tabletop.spawnTileRipple(finalPos, usedJump ? '#ff5945' : '#f5cb5c');
   }
 
-  if (board.id === 'tokaido' && mover === human && node && node.kind === 'jump') {
-    const foodIndex = [2, 7, 12].indexOf(node.id);
-    if (foodIndex >= 0 && !G.tokaidoGourmet.includes(foodIndex)) {
-      G.tokaidoGourmet.push(foodIndex);
-      showToast(`🍱 宿場名物「${node.title}」を堪能！`, `名物蒐集 ${G.tokaidoGourmet.length} / 3`);
-    }
+  syncDerivedHudFromMatch(G.match);
+
+  if (G.match.pendingChoice && G.match.winner < 0) {
+    G.phase = 'PENDING_CHOICE';
+    G.aiTimer = isSideControlledByHuman(G.match.pendingChoice.player) ? 0 : 0.65;
+    statusForTurn();
+    syncHudDOM();
+    return;
   }
 
-  if (board.id === 'yokai') {
-    if (finalPos > 0 && finalPos < board.goal && G.yokaiLanterns > 0) {
-      G.yokaiLanterns -= 1;
-      audio.lantern();
-      if (G.yokaiLanterns === 0) {
-        G.yokaiFrenzy = true;
-        showStamp('百鬼夜行', '怪異飛距離 二倍');
-        showToast('🏮 四隅の青行灯がすべて消えた！', '百鬼夜行発動 ─ 次の跳び距離が2倍！');
-      } else {
-        showToast(`🏮 青行灯がひとつ消えた（残り ${G.yokaiLanterns} 灯）`, '四灯全滅で百鬼夜行が到来');
-      }
-    }
-  }
-
-  if (G.yokaiFrenzy && usedJump) {
-    G.yokaiFrenzy = false;
-    G.yokaiLanterns = 4;
-    G.yokaiFrenzyUsed = true;
-  }
-  if (usedBounce) G.yokaiFrenzyUsed = true;
-
-  syncBoardStats();
   if (result.won || result.state.winner >= 0) {
     G.phase = 'SETTLEMENT';
     if (result.state.winner === G.match.humanSide) audio.win();
     else audio.lose();
-    unlockBoardCards(G.boardIdx);
+    lastSettlementUnlocks = evaluateMatchProgression(G.boardIdx, G.match);
+    galleryRendered = false;
     syncHudDOM();
     return;
   }
@@ -771,12 +1097,14 @@ function handleEvents(result, roll) {
   syncHudDOM();
 }
 
-function popcount3(mask) {
-  return [1, 2, 4].filter(m => mask & m).length;
-}
-
-function simulateWalk(board, from, steps, roll) {
-  const branchGood = roll % 2 === 0;
+function simulateWalk(board, from, steps, roll, matchState) {
+  const mover = matchState?.turn ?? 0;
+  const routeOverride = matchState?.boardState?.genji?.routeChoice?.[mover];
+  const branchGood = routeOverride === 'good'
+    ? true
+    : routeOverride === 'evil'
+      ? false
+      : (roll % 2 === 0);
   let pos = from;
   let dir = 1;
   const path = [pos];
@@ -827,7 +1155,7 @@ function beginMove(result, roll, oldState) {
   const steps = skipped ? 0 : (hist?.steps || roll);
   let indexes = board.style === 'tobi'
     ? [oldState.pos[mover], result.state.pos[mover]]
-    : simulateWalk(board, oldState.pos[mover], steps, roll);
+    : simulateWalk(board, oldState.pos[mover], steps, roll, oldState);
 
   const jump = result.events.find(e => e.type === 'jump');
   if (jump && indexes[indexes.length - 1] !== jump.to) indexes.push(jump.to);
@@ -836,10 +1164,9 @@ function beginMove(result, roll, oldState) {
   if (indexes.length < 2) indexes = [oldState.pos[mover], final];
 
   const path = pathToPoints(board, indexes, mover);
-  // Crisp 240ms per step so each hop feels distinct and rhythmic
   const dur = Math.max(480, Math.min(2200, (indexes.length - 1) * 240 + (jump ? 320 : 0)));
   G.pieceAnim = { side: mover, path, indexes, t0: performance.now(), duration: dur, lastSeg: -1 };
-  G.pendingResult = { result, roll };
+  G.pendingResult = { result, roll, preRollState: oldState };
   G.phase = 'MOVE';
   setStatus(
     `出目「${KANJI_NUMS[roll]} (${roll}点)」に従って駒が ${indexes.length - 1} 歩進みます`,
@@ -886,7 +1213,6 @@ function triggerTurnPageTurn(fromSide, toSide) {
   if (sweepEl) {
     sweepEl.dataset.direction = direction;
     sweepEl.classList.remove('active');
-    // Force reflow so rapid consecutive turn transitions replay the CSS page-turn sweep cleanly
     void sweepEl.offsetWidth;
     sweepEl.classList.add('active');
   }
@@ -918,18 +1244,109 @@ function triggerTurnPageTurn(fromSide, toSide) {
 
 function finishMove() {
   if (!G.pendingResult) return;
-  const { result, roll } = G.pendingResult;
-  const previousTurn = G.pieceAnim?.side ?? (G.match ? (1 - result.state.turn) : 0);
+  const { result, roll, preRollState } = G.pendingResult;
+  const previousTurn = G.pieceAnim?.side ?? (preRollState ? preRollState.turn : 0);
   G.pendingResult = null;
   G.pieceAnim = null;
+  G.lastPreRollSnapshot = preRollState;
   G.match = result.state;
-  G.phase = result.won || result.state.winner >= 0 ? 'SETTLEMENT' : 'ROLL';
   G.diceValue = roll;
+  G.phase = result.won || result.state.winner >= 0
+    ? 'SETTLEMENT'
+    : result.state.pendingChoice
+      ? 'PENDING_CHOICE'
+      : 'ROLL';
   handleEvents(result, roll);
-  if (G.phase !== 'SETTLEMENT') {
+  if (G.phase === 'ROLL' && previousTurn !== G.match.turn) {
     triggerTurnPageTurn(previousTurn, G.match.turn);
-    G.aiTimer = G.match.turn === G.match.humanSide ? 0 : 0.85;
+    G.aiTimer = isSideControlledByHuman(G.match.turn) ? 0 : 0.85;
   }
+}
+
+function submitTacticalChoice(action) {
+  if (!G.match || !G.match.pendingChoice) return { ok: false, reason: 'no_pending_choice' };
+  const board = currentBoard();
+  const prevPlayer = G.match.pendingChoice.player;
+  const res = EsugorokuCore.applyChoice(board, G.match, action);
+  if (!res.ok) return res;
+  G.match = res.state;
+  handleEvents(res, G.diceValue || 1);
+  if (G.phase !== 'SETTLEMENT' && !G.match.pendingChoice) {
+    G.phase = 'ROLL';
+    if (prevPlayer !== G.match.turn) {
+      triggerTurnPageTurn(prevPlayer, G.match.turn);
+    }
+    G.aiTimer = isSideControlledByHuman(G.match.turn) ? 0 : 0.85;
+    statusForTurn();
+    syncHudDOM();
+  }
+  return res;
+}
+
+function triggerRerollCharm() {
+  if (!G.match || !G.lastPreRollSnapshot) return { ok: false, reason: 'no_preroll_snapshot' };
+  const board = currentBoard();
+  const player = G.lastPreRollSnapshot.turn;
+  const restored = JSON.parse(JSON.stringify(G.lastPreRollSnapshot));
+  restored.rerollsUsedThisTurn = (G.match.rerollsUsedThisTurn || 0);
+  const res = EsugorokuCore.applyCharm(board, restored, 'reroll', { player });
+  if (!res.ok) return res;
+  G.match = res.state;
+  G.phase = 'ROLL';
+  G.aiTimer = isSideControlledByHuman(G.match.turn) ? 0 : 0.65;
+  showStamp('重抽符', '賽をもう一度振り直す！');
+  showToast('🎲 懐中護符「重抽符」を発動！今回の出目を破棄して振り直します', '1局につき1回限りの秘術');
+  statusForTurn();
+  syncHudDOM();
+  return res;
+}
+
+function triggerActiveCharmSlot(slotIndex) {
+  if (!G.match || G.screen !== 'PLAYING' || G.phase !== 'ROLL') return { ok: false };
+  const board = currentBoard();
+  const player = G.match.turn;
+  if (!isSideControlledByHuman(player)) return { ok: false };
+  const loadout = G.match.charmLoadout?.[player] || sanitizeCharmLoadout(G.charms);
+  const cid = loadout[slotIndex];
+  if (!cid) return { ok: false };
+
+  if (cid === 'wind' || cid === 'purify') {
+    const res = EsugorokuCore.applyCharm(board, G.match, cid, { player });
+    if (res.ok) {
+      G.match = res.state;
+      audio.charm();
+      const def = CHARM_BY_ID[cid];
+      showStamp(def?.name || '護符発動', def?.effect || '');
+      showToast(`🛡️ 懐中護符「${def?.name || cid}」を発動！`, def?.effect || '');
+      syncHudDOM();
+      return res;
+    }
+  } else if (cid === 'waka_slip' && board.id === 'genji') {
+    const curRoute = G.match.boardState?.genji?.routeChoice?.[player];
+    const nextRoute = curRoute === 'good' ? 'evil' : 'good';
+    const res = EsugorokuCore.applyCharm(board, G.match, 'waka_slip', { player, route: nextRoute });
+    if (res.ok) {
+      G.match = res.state;
+      audio.charm();
+      showStamp('和歌懐紙', nextRoute === 'good' ? '雅道（善）を予約' : '修羅道（悪）を予約');
+      showToast(`📜 懐中護符「和歌懐紙」を発動！#15 関屋の分岐を「${nextRoute === 'good' ? '雅道（善）' : '修羅道（悪）'}」に指定しました`, '源氏巻の道中制御');
+      syncHudDOM();
+      return res;
+    }
+  }
+
+  // Otherwise open the 12-charm loadout modal if pre-game, or show info toast
+  if (isPreGameMatch()) {
+    G.showCharmPicker = true;
+    audio.paper();
+    syncHudDOM();
+    return { ok: true, openedPicker: true };
+  }
+  const def = CHARM_BY_ID[cid];
+  if (def) {
+    showToast(`🛡️ 懐中護符「${def.name}」`, `${def.effect}（条件を満たすと発動します）`);
+  }
+  return { ok: false, reason: 'passive_charm' };
 }
 
 function targetRotation(value, yaw = 0.25) {
@@ -958,13 +1375,17 @@ function triggerHudBowlVibration(intensity = 1.0) {
   }
 }
 
-function startRoll(forcedValue = null) {
+function startRoll(forcedValue = null, isAiRoll = false) {
   unlockAudioOnce();
   if (G.screen !== 'PLAYING' || G.phase !== 'ROLL') return false;
-  if (!G.match || G.match.winner >= 0) return false;
-  if (G.match.turn !== G.match.humanSide && forcedValue === null) return false;
+  if (!G.match || G.match.winner >= 0 || G.match.pendingChoice) return false;
+  if (!isSideControlledByHuman(G.match.turn) && forcedValue === null && !isAiRoll) return false;
 
-  const value = forcedValue ?? (1 + Math.floor(Math.random() * 6));
+  // V1.1 Fair Dice Guarantee: Both Human and AI use the exact same fair 1..6 generator!
+  const value = (forcedValue !== null && forcedValue !== undefined)
+    ? Math.max(1, Math.min(6, Number(forcedValue) | 0))
+    : EsugorokuCore.rollDie(G.match);
+
   const target = targetRotation(value, Math.random() * 1.2 - 0.6);
   const die = G.physDice[0];
   G.phase = 'ANIM';
@@ -978,7 +1399,6 @@ function startRoll(forcedValue = null) {
   G.rollPending = true;
   setStatus('🎲 骨骰が賽碗の磁壁を撃ち、水墨飛沫と朱墨の滲みが迸っています…', '止まった上面の目が今回の歩数になります');
 
-  // Launch the bone die near the inner rim moving outward + tangentially so it immediately strikes the porcelain wall and caroms 3-5 times
   const launchAngle = Math.random() * Math.PI * 2;
   const launchSpeed = 340 + Math.random() * 85;
   die.settled = false;
@@ -1029,30 +1449,9 @@ function resolvePendingRoll() {
   const value = G.pendingRoll || G.diceValue;
   G.rollResolved = false;
   const board = currentBoard();
-  const oldState = G.match;
-  const multiplier = board.id === 'yokai' && G.yokaiFrenzy ? 2 : 1;
-  const result = EsugorokuCore.applyRoll(board, oldState, value, { jumpMultiplier: multiplier });
+  const oldState = JSON.parse(JSON.stringify(G.match));
+  const result = EsugorokuCore.applyRoll(board, oldState, value, { pauseOnChoice: true });
   beginMove(result, value, oldState);
-}
-
-function aiChooseRoll() {
-  const board = currentBoard();
-  const state = { ...G.match, turn: G.match.humanSide === 0 ? 1 : 0 };
-  let best = 1;
-  let bestVal = -Infinity;
-  for (let roll = 1; roll <= 6; roll++) {
-    const trial = EsugorokuCore.applyRoll(board, state, roll);
-    let v = 0;
-    if (trial.state.winner === state.turn) v = 10000;
-    else if (trial.state.winner >= 0) v = -10000;
-    else {
-      v = trial.state.pos[state.turn] * 3 + popcount3(trial.state.tokens[state.turn]) * 20 - trial.state.skip[state.turn] * 14;
-      const ev = EsugorokuCore.expectedValue(board, trial.state, state.turn);
-      v += Number.isFinite(ev) ? ev * 0.08 : 0;
-    }
-    if (v > bestVal) { bestVal = v; best = roll; }
-  }
-  return best;
 }
 
 function updateDice(dt) {
@@ -1069,7 +1468,6 @@ function updateDice(dt) {
         if (Math.abs(die.vz) > 10) {
           const bounceInt = Math.min(1.1, Math.abs(die.vz) / 155);
           die.vz = -die.vz * 0.54;
-          // 3D Corner-Impact Torque: off-center cube corners kick angular spin on floor bounce
           die.wx += (Math.random() - 0.5) * bounceInt * 6.2;
           die.wz += (Math.random() - 0.5) * bounceInt * 6.2;
           audio.bounce(bounceInt);
@@ -1093,7 +1491,6 @@ function updateDice(dt) {
       die.ry += die.wy * dt;
       die.rz += die.wz * dt;
 
-      // Circular Porcelain Chawan Bowl Wall Collision Physics ("碗壁物理碰撞")
       const dx = die.x - BOWL_2D_CENTER.x;
       const dy = die.y - BOWL_2D_CENTER.y;
       const dist = Math.hypot(dx, dy);
@@ -1109,7 +1506,6 @@ function updateDice(dt) {
           const ty = nx;
           const vt = die.vx * tx + die.vy * ty;
           const restitution = 0.78;
-          // Carom reflection off the curved porcelain wall with tangential spin transfer
           const tangDeflect = vt * 0.92 + (Math.random() - 0.5) * 48;
           die.vx = (-vn * restitution) * nx + tangDeflect * tx;
           die.vy = (-vn * restitution) * ny + tangDeflect * ty;
@@ -1136,7 +1532,6 @@ function updateDice(dt) {
         }
       }
     } else {
-      // Corner-rock settling onto the exact target face in 'YXZ' Euler space
       die.z = Math.max(0, die.z + die.vz * dt);
       die.vz = die.z > 0 ? (die.vz - 820 * dt) : 0;
 
@@ -1205,26 +1600,53 @@ function update(dt) {
     if (p >= 1) finishMove();
   }
 
-  if (G.phase === 'ROLL' && G.match?.winner < 0 && G.match?.turn !== G.match?.humanSide) {
+  // AI resolves pending tactical choice (stance, travel coin, Genji branch)
+  if (G.phase === 'PENDING_CHOICE' && G.match?.pendingChoice && !isSideControlledByHuman(G.match.pendingChoice.player)) {
     if (G.aiTimer <= 0.001) {
       const board = currentBoard();
-      const human = G.match.humanSide;
-      const ai = 1 - human;
-      // AI uses Tactical Gale Strike if human is leading in the second half of the board
-      if ((G.match.strikeCooldown?.[ai] || 0) === 0 &&
-          G.match.pos[human] >= 8 &&
-          G.match.pos[human] - G.match.pos[ai] >= 3) {
+      const action = EsugorokuCore.aiSelectAction(board, G.match, G.aiDifficulty);
+      submitTacticalChoice(action);
+    } else {
+      G.aiTimer -= dt;
+    }
+    return;
+  }
+
+  // AI pre-roll tactical decision + fair dice throw
+  if (G.phase === 'ROLL' && G.match?.winner < 0 && !G.match?.pendingChoice && !isSideControlledByHuman(G.match?.turn)) {
+    if (G.aiTimer <= 0.001) {
+      const board = currentBoard();
+      const ai = G.match.turn;
+      const action = EsugorokuCore.aiSelectAction(board, G.match, G.aiDifficulty);
+
+      if (action.type === 'strike') {
         const st = EsugorokuCore.applyTacticalStrike(board, G.match, ai);
         if (st.ok) {
           G.match = st.state;
           audio.duel();
           if (tabletop) tabletop.spawnTileRipple(st.to, '#a83279');
-          showToast(`🌪️ 相手の「辻風奇襲」！あなたが #${st.from} → #${st.to} へ2格引き戻された！`, '激しい攻防の応酬');
+          showToast(`🌪️ 相手の「辻風奇襲」！あなたが #${st.from} → #${st.to} へ引き戻された！`, '激しい攻防の応酬');
+          syncHudDOM();
+        }
+      } else if (action.type === 'charm') {
+        const ch = EsugorokuCore.applyCharm(board, G.match, action.charmId, { player: ai });
+        if (ch.ok) {
+          G.match = ch.state;
+          audio.charm();
+          const cDef = CHARM_BY_ID[action.charmId];
+          showToast(`🛡️ 相手が懐中護符「${cDef?.name || action.charmId}」を発動！`, cDef?.effect || '');
+          syncHudDOM();
+        }
+      } else if (action.type === 'genji_branch') {
+        const br = EsugorokuCore.applyChoice(board, G.match, { ...action, player: ai, completeTurn: false });
+        if (br.ok) {
+          G.match = br.state;
           syncHudDOM();
         }
       }
-      const value = aiChooseRoll();
-      startRoll(value);
+
+      // Fair random die throw — AI NEVER picks dice faces!
+      startRoll(null, true);
       G.aiTimer = 0;
     } else {
       G.aiTimer -= dt;
@@ -1260,16 +1682,16 @@ function openLoupeModal(nodeIdx) {
 function triggerTacticalStrike() {
   unlockAudioOnce();
   if (G.screen !== 'PLAYING' || G.phase !== 'ROLL' || !G.match) return false;
-  const human = G.match.humanSide;
-  if (G.match.turn !== human) return false;
+  const actor = G.match.turn;
+  if (!isSideControlledByHuman(actor)) return false;
   const board = currentBoard();
-  const res = EsugorokuCore.applyTacticalStrike(board, G.match, human);
+  const res = EsugorokuCore.applyTacticalStrike(board, G.match, actor);
   if (!res.ok) return false;
   G.match = res.state;
   audio.duel();
   if (tabletop) tabletop.spawnTileRipple(res.to, '#6ce0ff');
   showStamp('辻風奇襲', `相手を #${res.to} へ引き戻し`);
-  showToast(`🌪️ 辻風奇襲を発動！相手を #${res.from} → #${res.to} へ2格引き戻した！`, '続けて賽を振って一気に追い抜こう');
+  showToast(`🌪️ 辻風奇襲を発動！相手を #${res.from} → #${res.to} へ引き戻した！`, '続けて賽を振って一気に追い抜こう');
   syncHudDOM();
   return true;
 }
@@ -1283,6 +1705,29 @@ function setupDOMControls() {
       window.__ESR__.switchToBoard(idx);
       audio.select();
     });
+  });
+
+  // AI Difficulty & Local 2P selector in Top Bar
+  const diffSelect = document.getElementById('select-ai-difficulty');
+  diffSelect?.addEventListener('change', () => {
+    unlockAudioOnce();
+    const val = diffSelect.value;
+    if (val === 'local2p') {
+      G.mode = 'local2p';
+      if (G.match) G.match.mode = 'local2p';
+      showToast('👥 同席二人対戦モードに切り替えました', '先手・後手ともに手動で賽と戦術を操作します');
+    } else {
+      G.mode = 'ai';
+      G.aiDifficulty = val;
+      if (G.match) {
+        G.match.mode = 'ai';
+        G.match.aiDifficulty = val;
+      }
+      showToast(`🤖 AI難度を「${DIFFICULTY_LABELS[val] || val}」に設定しました`, '双方とも完全に同じ公平な骨骰（1〜6）を使用します');
+    }
+    saveProfile();
+    statusForTurn();
+    syncHudDOM();
   });
 
   // Camera preset buttons in Top Bar
@@ -1365,6 +1810,25 @@ function setupDOMControls() {
       syncHudDOM();
     });
   });
+
+  // 12-Charm Picker Modal & Active Charm Slots
+  document.getElementById('btn-lobby-charms')?.addEventListener('click', () => {
+    unlockAudioOnce();
+    G.showCharmPicker = true;
+    audio.paper();
+    syncHudDOM();
+  });
+  document.getElementById('btn-charm-modal-close')?.addEventListener('click', () => {
+    G.showCharmPicker = false;
+    audio.select();
+    syncHudDOM();
+  });
+  for (let i = 0; i < 3; i++) {
+    document.getElementById(`charm-slot-${i}`)?.addEventListener('click', () => {
+      unlockAudioOnce();
+      triggerActiveCharmSlot(i);
+    });
+  }
 
   // Woodblock Card Loupe Modal
   const loupeModal = document.getElementById('loupe-modal');
@@ -1507,7 +1971,7 @@ function setupDOMControls() {
     unlockAudioOnce();
     if (e.code === 'Space') {
       e.preventDefault();
-      if (G.screen === 'PLAYING' && G.phase === 'ROLL' && G.match?.turn === G.match?.humanSide) {
+      if (G.screen === 'PLAYING' && G.phase === 'ROLL' && isSideControlledByHuman(G.match?.turn)) {
         startRoll();
       }
     } else if (e.code === 'KeyH') {
@@ -1519,6 +1983,9 @@ function setupDOMControls() {
     } else if (e.code === 'Escape') {
       if (loupeModal && !loupeModal.classList.contains('hidden')) {
         loupeModal.classList.add('hidden');
+      } else if (G.showCharmPicker) {
+        G.showCharmPicker = false;
+        syncHudDOM();
       } else if (G.showHandPicker) {
         G.showHandPicker = false;
         syncHudDOM();
@@ -1583,6 +2050,7 @@ function tick() {
 function snapshot() {
   const board = currentBoard();
   const handCard = currentHandCard();
+  if (G.match) syncDerivedHudFromMatch(G.match);
   const signature = board.nodes.map(n => `${Math.round(n.x)},${Math.round(n.y)},${Math.round(n.w)},${Math.round(n.h)}`).join('|');
   return {
     screen: G.screen,
@@ -1609,10 +2077,17 @@ function snapshot() {
     })),
     humanSide: G.match?.humanSide,
     turn: G.match?.turn,
+    ply: G.match?.ply ?? 0,
+    maxPly: G.match?.maxPly ?? 80,
     pos: G.match ? [...G.match.pos] : [],
     tokens: G.match ? [...G.match.tokens] : [],
     skip: G.match ? [...G.match.skip] : [],
     winner: G.match?.winner ?? -1,
+    resultReason: G.match?.resultReason ?? null,
+    pendingChoice: G.match?.pendingChoice ? { ...G.match.pendingChoice } : null,
+    boardState: G.match?.boardState ? JSON.parse(JSON.stringify(G.match.boardState)) : null,
+    aiDifficulty: G.aiDifficulty,
+    mode: G.mode,
     lanterns: G.yokaiLanterns,
     previewTargets: board.id === 'yokai' && G.match
       ? [1, 2, 3, 4, 5, 6].map(roll => EsugorokuCore.previewDestinations(board, G.match, roll)[0])
@@ -1625,6 +2100,7 @@ function snapshot() {
     customBuff: G.match?.customBuff ? { ...G.match.customBuff } : (handCard?.buff ? { ...handCard.buff } : null),
     isPreGame: isPreGameMatch(),
     collection: G.collection.size,
+    achievements: G.achievements.size,
     statusText: G.statusText,
     statusSub: G.statusSub,
     diceValue: G.diceValue,
@@ -1664,17 +2140,19 @@ function snapshot() {
 
 window.__ESR__ = {
   get state() { return G; },
+  core: EsugorokuCore,
   boards: BOARDS,
   cards: UKIYOE_CARDS,
   charms: CHARMS,
+  achievements: ACHIEVEMENTS,
   snapshot,
   switchToBoard(index) {
     const i = Math.max(0, Math.min(3, Number(index) | 0));
     G.boardIdx = i;
     G.screen = 'PLAYING';
     G.humanSide = 0;
-    G.charms = ['stay', 'guard', 'dash'];
-    unlockBoardCards(i);
+    G.charms = sanitizeCharmLoadout(G.charms);
+    lastSettlementUnlocks = null;
     resetMatchState();
     invalidateScene();
     G.match.turn = G.humanSide;
@@ -1689,14 +2167,19 @@ window.__ESR__ = {
   openSide(index) { openSide(Number(index) | 0); return snapshot(); },
   beginMatch() { beginMatch(); return snapshot(); },
   roll(value) { return startRoll(value ?? undefined); },
-  applyRollNow(value) {
+  applyRollNow(value, options = {}) {
     const board = currentBoard();
-    const old = G.match;
+    const old = JSON.parse(JSON.stringify(G.match));
     const prevTurn = old.turn;
     const rollVal = Number(value) || 1;
-    const result = EsugorokuCore.applyRoll(board, old, rollVal, { jumpMultiplier: 1 });
+    G.lastPreRollSnapshot = old;
+    const result = EsugorokuCore.applyRoll(board, old, rollVal, options);
     G.match = result.state;
-    G.phase = result.won ? 'SETTLEMENT' : 'ROLL';
+    G.phase = result.won || result.state.winner >= 0
+      ? 'SETTLEMENT'
+      : result.state.pendingChoice
+        ? 'PENDING_CHOICE'
+        : 'ROLL';
     G.diceValue = rollVal;
     G.dice[0] = rollVal;
     if (G.physDice[0]) {
@@ -1716,10 +2199,58 @@ window.__ESR__ = {
       tabletop.update(0.05, performance.now() / 1000);
     }
     handleEvents(result, rollVal);
-    if (G.phase !== 'SETTLEMENT') {
+    if (G.phase === 'ROLL' && prevTurn !== G.match.turn) {
       triggerTurnPageTurn(prevTurn, G.match.turn);
       G.aiTimer = 0;
     }
+    syncHudDOM();
+    return snapshot();
+  },
+  applyChoice(action) {
+    const res = submitTacticalChoice(action);
+    return { ...res, snapshot: snapshot() };
+  },
+  applyCharm(charmId, options = {}) {
+    const board = currentBoard();
+    const res = EsugorokuCore.applyCharm(board, G.match, charmId, options);
+    if (res.ok) {
+      G.match = res.state;
+      syncHudDOM();
+    }
+    return { ...res, snapshot: snapshot() };
+  },
+  setCharms(charmIds) {
+    G.charms = sanitizeCharmLoadout(charmIds);
+    if (isPreGameMatch()) {
+      resetMatchState();
+      invalidateScene();
+    }
+    saveProfile();
+    syncHudDOM();
+    return snapshot();
+  },
+  openCharmPicker(on = true) {
+    G.showCharmPicker = Boolean(on);
+    syncHudDOM();
+    return snapshot();
+  },
+  setAiDifficulty(difficulty) {
+    if (['easy', 'normal', 'hard', 'master'].includes(difficulty)) {
+      G.aiDifficulty = difficulty;
+      G.mode = 'ai';
+      if (G.match) {
+        G.match.aiDifficulty = difficulty;
+        G.match.mode = 'ai';
+      }
+      saveProfile();
+      syncHudDOM();
+    }
+    return snapshot();
+  },
+  setMode(mode) {
+    G.mode = mode === 'local2p' ? 'local2p' : 'ai';
+    if (G.match) G.match.mode = G.mode;
+    saveProfile();
     syncHudDOM();
     return snapshot();
   },

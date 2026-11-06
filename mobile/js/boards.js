@@ -646,39 +646,281 @@ const genji = {
 
 export const BOARDS = [tokaido, yokai, kesshu, genji];
 
+// Decorate all board nodes with composable features[], progressValue, gourmetBit, and lanternBit
+const TOKAIDO_GOURMET_BITS = { 2: 1, 7: 2, 12: 4 };
+for (const n of tokaido.nodes) {
+  const feats = [];
+  if (n.kind === 'start') feats.push('start');
+  if (n.kind === 'goal') feats.push('goal');
+  if ((n.stayTurns | 0) > 0) feats.push('stay');
+  if ((n.jumpDelta | 0) !== 0) feats.push(n.jumpDelta < 0 ? 'checkpoint' : 'jump');
+  if (TOKAIDO_GOURMET_BITS[n.id]) {
+    n.gourmetBit = TOKAIDO_GOURMET_BITS[n.id];
+    feats.push('gourmet');
+  }
+  n.features = feats;
+  n.progressValue = n.id;
+}
+
+const YOKAI_LANTERN_BITS = { 4: 1, 10: 2, 16: 4, 22: 8 };
+for (const n of yokai.nodes) {
+  const feats = [];
+  if (n.kind === 'start') feats.push('start');
+  else if (n.kind === 'goal') feats.push('goal');
+  else feats.push('jump');
+  if (YOKAI_LANTERN_BITS[n.id]) {
+    n.lanternBit = YOKAI_LANTERN_BITS[n.id];
+    feats.push('lantern');
+  }
+  n.features = feats;
+  n.progressValue = n.id;
+}
+
+for (const n of kesshu.nodes) {
+  const feats = [];
+  if (n.kind === 'start') feats.push('start');
+  if (n.kind === 'goal') feats.push('goal');
+  if ((n.tokens | 0) !== 0) feats.push('token');
+  if ((n.stayTurns | 0) > 0) feats.push('stay');
+  if (Array.isArray(n.jumpTable) && n.jumpTable.some(v => v !== 0)) feats.push('jump');
+  n.features = feats;
+  n.progressValue = n.id;
+}
+
+for (const n of genji.nodes) {
+  const feats = [];
+  if (n.kind === 'start') feats.push('start');
+  if (n.kind === 'goal') feats.push('goal');
+  if (n.kind === 'branch') {
+    feats.push('branch');
+    n.choice = { type: 'genji_branch', options: ['good', 'evil'] };
+  }
+  if (n.kind === 'good') feats.push('good');
+  if (n.kind === 'evil') {
+    feats.push('evil');
+    n.grudgeBit = 1 << (n.id - 21);
+  }
+  if ((n.stayTurns | 0) > 0) feats.push('stay');
+  if (Array.isArray(n.jumpTable) && n.jumpTable.some(v => v !== 0)) feats.push('jump');
+  n.features = feats;
+  // Normalize progressValue so both 5-node branch tracks (#16..#20 and #21..#25) have equal route progress 16..20 -> goal 21
+  if (n.id <= 15) n.progressValue = n.id;
+  else if (n.id >= 16 && n.id <= 20) n.progressValue = n.id;
+  else if (n.id >= 21 && n.id <= 25) n.progressValue = n.id - 5;
+  else n.progressValue = 21;
+}
+
 /* ------------------------------------------------------------------ */
-/* 懐中守り札                                                          */
+/* 懐中守り札（V1.2 全十二種・開幕三種選択）                            */
 /* ------------------------------------------------------------------ */
+
+export const MAX_EQUIPPED_CHARMS = 3;
+export const DEFAULT_CHARM_IDS = Object.freeze(['stay', 'guard', 'dash']);
 
 export const CHARMS = [
   {
     id: 'stay',
     name: '宿場守り',
+    kanji: '宿',
     yomi: 'しゅくばまもり',
+    category: 'defense',
+    timing: 'on_landing',
+    cooldownTurns: 4,
+    oncePerMatch: false,
+    boardId: null,
     mask: 1,
     art: 'charm_stay',
     color: '#9c3a2a',
-    text: '「泊」の一休みを無効にし、4手ごとに再充填される。',
+    shortDesc: '「泊」休みを無効化',
+    text: '「泊」の一休みを無効にし、自身の4手番ごとに再充填される。',
   },
   {
     id: 'guard',
     name: '妖怪封じ',
+    kanji: '封',
     yomi: 'ようかいふうじ',
+    category: 'defense',
+    timing: 'on_landing',
+    cooldownTurns: 4,
+    oncePerMatch: false,
+    boardId: null,
     mask: 2,
     art: 'charm_guard',
     color: '#315e68',
-    text: '関所や妖怪の「戻る」跳びを封じ、4手ごとに再充填される。',
+    shortDesc: '後ろ戻り跳びを無効化',
+    text: '関所や妖怪の「戻る」負向跳びを封じ、自身の4手番ごとに再充填される。',
   },
   {
     id: 'dash',
     name: '東海道早駕籠',
+    kanji: '駆',
     yomi: 'とうかいどう はやかご',
+    category: 'move',
+    timing: 'pre_move',
+    cooldownTurns: 4,
+    oncePerMatch: false,
+    boardId: null,
     mask: 4,
     art: 'charm_dash',
     color: '#8a6a28',
-    text: '出目に +1 歩を加え、要所到達や5手ごとに再充填される。',
+    shortDesc: '出目を＋1歩加速',
+    text: '移動時に出目へ +1 歩を加え、自身の4手番ごとに再充填される（風行符と同手番重複不可）。',
+  },
+  {
+    id: 'reroll',
+    name: '重骰符',
+    kanji: '重',
+    yomi: 'ちょうとうふ',
+    category: 'rng',
+    timing: 'post_roll',
+    cooldownTurns: 0,
+    oncePerMatch: true,
+    boardId: null,
+    mask: 8,
+    art: 'charm_reroll',
+    color: '#7a3b69',
+    shortDesc: '賽を1回振り直す（1局1回）',
+    text: '賽を振った直後・移動前に1度だけ振り直せる（新しい出目を必ず採用・1局1回限り）。',
+  },
+  {
+    id: 'decoy',
+    name: '替身符',
+    kanji: '替',
+    yomi: 'みがわりふ',
+    category: 'defense',
+    timing: 'on_defend',
+    cooldownTurns: 4,
+    oncePerMatch: false,
+    boardId: null,
+    mask: 16,
+    art: 'charm_decoy',
+    color: '#3d5a45',
+    shortDesc: '同格弾き・武具奪取・奇襲を無効化',
+    text: '同格衝突の撃退および武具奪取、または相手の辻風奇襲を1回無効化する（4手番冷却）。',
+  },
+  {
+    id: 'counter',
+    name: '反撃符',
+    kanji: '反',
+    yomi: 'はんげきふ',
+    category: 'counter',
+    timing: 'on_defend',
+    cooldownTurns: 4,
+    oncePerMatch: false,
+    boardId: null,
+    mask: 32,
+    art: 'charm_counter',
+    color: '#a33327',
+    shortDesc: '被追突時に相手を1格押し返す',
+    text: '同格追突を受けた際、攻撃してきた相手を1格後ろへ押し返す（充能ごとに1回発動）。',
+  },
+  {
+    id: 'wind',
+    name: '風行符',
+    kanji: '風',
+    yomi: 'ふうこうふ',
+    category: 'move',
+    timing: 'pre_roll',
+    cooldownTurns: 5,
+    oncePerMatch: false,
+    boardId: null,
+    mask: 64,
+    art: 'charm_wind',
+    color: '#266478',
+    shortDesc: '宣言で今回移動＋2歩（早駕籠重複不可）',
+    text: '賽を振る前に宣言して使用すると今回の移動が +2 歩になる（早駕籠と同手番には重ならない）。',
+  },
+  {
+    id: 'purify',
+    name: '浄心符',
+    kanji: '浄',
+    yomi: 'じょうしんふ',
+    category: 'defense',
+    timing: 'on_landing',
+    cooldownTurns: 4,
+    oncePerMatch: false,
+    boardId: null,
+    mask: 128,
+    art: 'charm_purify',
+    color: '#5a4b82',
+    shortDesc: '泊休みまたは負向跳びのどちらか1回解消',
+    text: '着地時の「泊休み」または「負向跳び」のいずれか発生した方を1回打ち消す万能厄除け符。',
+  },
+  {
+    id: 'tokaido_pass',
+    name: '東海道旅券',
+    kanji: '旅',
+    yomi: 'とうかいどう りょけん',
+    category: 'volume',
+    timing: 'passive_start',
+    cooldownTurns: 0,
+    oncePerMatch: true,
+    boardId: 'tokaido',
+    mask: 256,
+    art: 'charm_tokaido_pass',
+    color: '#b86928',
+    shortDesc: '【東海道専用】開幕旅銭2枚獲得',
+    text: '東海道画帖専用。対局開始時に「旅銭」を2枚得て出発し、泊休み免除や関所戻りの帳消しに使える。',
+  },
+  {
+    id: 'andon_ward',
+    name: '青行灯守',
+    kanji: '灯',
+    yomi: 'あおあんどんまもり',
+    category: 'volume',
+    timing: 'on_frenzy',
+    cooldownTurns: 0,
+    oncePerMatch: true,
+    boardId: 'yokai',
+    mask: 512,
+    art: 'charm_andon_ward',
+    color: '#256c65',
+    shortDesc: '【百物語専用】百鬼夜行が3倍跳びに強化',
+    text: '百種怪談専用。四つの青行灯を灯した後の次回正向怪異ジャンプ倍率を2倍→3倍へ引き上げる（1局1回）。',
+  },
+  {
+    id: 'gunbai_seal',
+    name: '旗本軍配',
+    kanji: '軍',
+    yomi: 'はたもとぐんばい',
+    category: 'volume',
+    timing: 'on_defend',
+    cooldownTurns: 0,
+    oncePerMatch: true,
+    boardId: 'kesshu',
+    mask: 1024,
+    art: 'charm_gunbai_seal',
+    color: '#8c2323',
+    shortDesc: '【英勇揃専用】最初の武具奪取を完全防御',
+    text: '英勇揃専用。一騎討ちで最初に武具を奪われそうになった際、武具奪取を完全に防いで消費される。',
+  },
+  {
+    id: 'waka_slip',
+    name: '和歌短冊',
+    kanji: '歌',
+    yomi: 'わかたんざく',
+    category: 'volume',
+    timing: 'on_branch',
+    cooldownTurns: 0,
+    oncePerMatch: false,
+    boardId: 'genji',
+    mask: 2048,
+    art: 'charm_waka_slip',
+    color: '#7a5228',
+    shortDesc: '【源氏専用】善悪分岐の先読みと自由選択',
+    text: '源氏絵合専用。関屋（#15）の善悪分岐にて両道の危険・恩恵摘要を先読みし、任意の道を自在に選べる。',
   },
 ];
+
+for (const c of CHARMS) {
+  c.bit = c.mask;
+  c.icon = c.kanji;
+  c.effect = c.shortDesc;
+  c.cooldown = c.cooldownTurns;
+  c.trigger = (c.timing === 'pre_roll' || c.timing === 'post_roll' || c.timing === 'on_branch') ? 'active' : 'passive';
+}
+
+export const CHARM_BY_ID = Object.fromEntries(CHARMS.map(c => [c.id, c]));
 
 /* ------------------------------------------------------------------ */
 /* 三十六枚 錦絵大図鑑 ＆ 自定义手札（初期Buff）大系                     */
@@ -774,8 +1016,8 @@ export const HAND_CARD_BUFF_ARCHETYPES = {
     kind: 'eternal_talisman',
     seal: '雅',
     name: '瑞兆護符の加護',
-    shortDesc: '護符再充填2倍速(4手)・開幕+1格＆初手+1歩',
-    detail: '開幕+1格・初手+1歩に加え、消費した懐中守札の再充填周期を8手→4手（2ラウンド）へ半減させる持久戦初期Buff。',
+    shortDesc: '護符再充填2倍速(2手)・開幕+1格＆初手+1歩',
+    detail: '開幕+1格・初手+1歩に加え、消費した懐中守札の再充填周期を半減させる持久戦初期Buff。',
     color: '#6e3a7a',
     startPosBonus: 1,
     firstRollBonus: 1,
@@ -831,9 +1073,22 @@ const CARD_BUFF_ASSIGNMENTS = {
   genji_09: 'eternal_talisman',
 };
 
+const UNLOCK_TIERS = {
+  1: { type: 'starter', label: '初期開帳（新手引導）' },
+  2: { type: 'starter', label: '初期開帳（新手引導）' },
+  3: { type: 'starter', label: '初期開帳（新手引導）' },
+  4: { type: 'complete_board', label: 'この画帖を初めて完走する' },
+  5: { type: 'beat_normal_ai', label: 'この画帖で普通以上の相手に勝利する' },
+  6: { type: 'volume_mechanic', label: 'この画帖の固有戦術目標を達成する' },
+  7: { type: 'veteran_goal', label: 'この画帖で累計2勝または追突合戦2回を達成' },
+  8: { type: 'beat_hard_ai', label: '困難AIに勝利、または護符なしで勝利する' },
+  9: { type: 'master_challenge', label: '大師AIに勝利、または36手以内に大上りする' },
+};
+
 function card(id, board, number, title, reading, artist, series, art, rarity, poem, description) {
   const buffKey = CARD_BUFF_ASSIGNMENTS[id] || 'headstart';
   const archetype = HAND_CARD_BUFF_ARCHETYPES[buffKey] || HAND_CARD_BUFF_ARCHETYPES.headstart;
+  const unlock = UNLOCK_TIERS[number] || UNLOCK_TIERS[1];
   return {
     id,
     board,
@@ -846,6 +1101,12 @@ function card(id, board, number, title, reading, artist, series, art, rarity, po
     rarity,
     poem,
     description,
+    unlockCondition: {
+      type: unlock.type,
+      boardIndex: board,
+      number,
+      label: unlock.label,
+    },
     buff: {
       ...archetype,
       cardId: id,
@@ -899,6 +1160,17 @@ export const UKIYOE_CARDS = [
 export const CARD_BY_ID = Object.fromEntries(UKIYOE_CARDS.map(c => [c.id, c]));
 export const CARDS_BY_BOARD = BOARDS.map((_, i) => UKIYOE_CARDS.filter(c => c.board === i));
 
+export const ACHIEVEMENTS = [
+  ...BOARDS.flatMap((b, idx) => [
+    { id: `${b.id}_first_clear`, boardIndex: idx, title: `${b.shortTitle}・初踏破`, desc: `${b.title}を最後まで完走する` },
+    { id: `${b.id}_first_win`, boardIndex: idx, title: `${b.shortTitle}・初勝利`, desc: `${b.title}で相手に勝利する` },
+    { id: `${b.id}_core_mechanic`, boardIndex: idx, title: `${b.shortTitle}・秘伝極意`, desc: `${b.title}の固有戦術（旅銭・四灯・戦術姿勢・善悪選択）を達成する` },
+    { id: `${b.id}_no_charm_win`, boardIndex: idx, title: `${b.shortTitle}・無頼の旅`, desc: `${b.title}で懐中護符を装備せずに勝利する` },
+    { id: `${b.id}_hard_win`, boardIndex: idx, title: `${b.shortTitle}・強敵撃破`, desc: `${b.title}で困難以上の相手に勝利する` },
+    { id: `${b.id}_master_win`, boardIndex: idx, title: `${b.shortTitle}・名人位`, desc: `${b.title}で大師AIに勝利、または36手以内で勝利する` },
+  ]),
+];
+
 export function getCardById(cardOrId) {
   if (!cardOrId) return null;
   if (typeof cardOrId === 'object' && cardOrId.id) return CARD_BY_ID[cardOrId.id] || cardOrId;
@@ -922,17 +1194,44 @@ export function getJumpText(node) {
   return node.jumpText || jumpRule(node.jumpTable || []);
 }
 
+export function sanitizeCharmLoadout(charmIds, boardId = null) {
+  if (!Array.isArray(charmIds)) return [...DEFAULT_CHARM_IDS];
+  const unique = [];
+  for (const id of charmIds) {
+    const def = CHARM_BY_ID[id];
+    if (!def) continue;
+    if (boardId && def.boardId && def.boardId !== boardId) continue;
+    if (!unique.includes(id)) unique.push(id);
+    if (unique.length >= MAX_EQUIPPED_CHARMS) break;
+  }
+  return unique;
+}
+
 export function createMatch(boardIndex, options = {}) {
   const board = getBoard(boardIndex);
   const humanSide = options.humanSide === 1 ? 1 : 0;
-  const charms = Array.isArray(options.charms) ? [...new Set(options.charms)] : ['stay', 'guard', 'dash'];
-  const charmMaskFor = side => {
-    if (side !== humanSide) return 0;
-    return charms.reduce((mask, id) => {
-      const charm = CHARMS.find(c => c.id === id);
-      return mask | (charm ? charm.mask : 0);
-    }, 0);
-  };
+  const aiSide = 1 - humanSide;
+  const mode = options.mode === 'local2p' ? 'local2p' : 'ai';
+  const aiDifficulty = ['easy', 'normal', 'hard', 'master'].includes(options.aiDifficulty)
+    ? options.aiDifficulty
+    : 'normal';
+
+  const humanCharms = Array.isArray(options.charms)
+    ? sanitizeCharmLoadout(options.charms, board.id)
+    : [...DEFAULT_CHARM_IDS];
+  const rawOppCharms = options.opponentCharms ?? options.charmsP1;
+  const opponentCharms = Array.isArray(rawOppCharms)
+    ? sanitizeCharmLoadout(rawOppCharms, board.id)
+    : [];
+
+  const charmLoadout = humanSide === 0
+    ? [humanCharms, opponentCharms]
+    : [opponentCharms, humanCharms];
+
+  const charmMaskFor = side => charmLoadout[side].reduce((mask, id) => {
+    const charm = CHARM_BY_ID[id];
+    return mask | (charm ? charm.mask : 0);
+  }, 0);
 
   const chosenCard = getCardById(options.customCard);
   const customBuff = chosenCard && chosenCard.buff
@@ -944,31 +1243,109 @@ export function createMatch(boardIndex, options = {}) {
       }
     : null;
 
+  const opponentCardObj = getCardById(options.opponentCard);
+  const opponentBuff = opponentCardObj && opponentCardObj.buff
+    ? {
+        ...opponentCardObj.buff,
+        cardId: opponentCardObj.id,
+        cardTitle: opponentCardObj.title,
+        firstRollPending: (opponentCardObj.buff.firstRollBonus | 0) > 0,
+      }
+    : null;
+
   const pos = [board.start, board.start];
   const tokens = [0, 0];
   if (customBuff) {
-    const bonusPos = Math.max(0, customBuff.startPosBonus | 0);
+    const bonusPos = Math.max(0, Math.min(2, customBuff.startPosBonus | 0));
     pos[humanSide] = Math.min(board.goal - 1, board.start + bonusPos);
     tokens[humanSide] = customBuff.initialTokens | 0;
   }
+  if (opponentBuff) {
+    const bonusPos = Math.max(0, Math.min(2, opponentBuff.startPosBonus | 0));
+    pos[aiSide] = Math.min(board.goal - 1, board.start + bonusPos);
+    tokens[aiSide] = opponentBuff.initialTokens | 0;
+  }
+
+  const initialCoins = [
+    charmLoadout[0].includes('tokaido_pass') && board.id === 'tokaido' ? 2 : 0,
+    charmLoadout[1].includes('tokaido_pass') && board.id === 'tokaido' ? 2 : 0,
+  ];
+  const initialGourmetMask = [
+    board.id === 'tokaido' && (tokens[0] & 1) ? 1 : 0,
+    board.id === 'tokaido' && (tokens[1] & 1) ? 1 : 0,
+  ];
+  if (initialGourmetMask[0]) initialCoins[0] = Math.min(3, initialCoins[0] + 1);
+  if (initialGourmetMask[1]) initialCoins[1] = Math.min(3, initialCoins[1] + 1);
+
+  const seed = Number.isInteger(options.seed) ? (options.seed >>> 0) : ((Date.now() ^ 0x9e3779b9) >>> 0);
 
   return {
     boardIndex,
+    boardId: board.id,
+    mode,
+    aiDifficulty,
+    players: [
+      { type: humanSide === 0 ? 'human' : (mode === 'local2p' ? 'human' : 'ai'), difficulty: humanSide === 0 ? null : aiDifficulty },
+      { type: humanSide === 1 ? 'human' : (mode === 'local2p' ? 'human' : 'ai'), difficulty: humanSide === 1 ? null : aiDifficulty },
+    ],
     pos,
     tokens,
     skip: [0, 0],
     charms: [charmMaskFor(0), charmMaskFor(1)],
     charmUsed: [0, 0],
+    charmLoadout,
+    charmCooldown: [{}, {}],
+    windActive: [false, false],
     customCard: chosenCard ? chosenCard.id : null,
     customBuff,
+    equippedCard: [
+      humanSide === 0 ? (chosenCard?.id || null) : (opponentCardObj?.id || null),
+      humanSide === 1 ? (chosenCard?.id || null) : (opponentCardObj?.id || null),
+    ],
+    playerBuffs: [
+      humanSide === 0 ? customBuff : opponentBuff,
+      humanSide === 1 ? customBuff : opponentBuff,
+    ],
     strikeCooldown: [0, 0],
     duelCount: 0,
+    stealCount: [0, 0],
     turn: humanSide === 0 ? 0 : 1,
     humanSide,
     winner: -1,
+    resultReason: null,
     turnCount: 0,
+    ply: 0,
+    maxPly: Number.isInteger(options.maxPly) ? options.maxPly : (board.maxTurns || 120),
+    playerTurnCount: [0, 0],
+    pendingChoice: null,
+    boardState: {
+      tokaido: {
+        gourmetMask: initialGourmetMask,
+        coins: initialCoins,
+        coinsSpent: [0, 0],
+      },
+      yokai: {
+        lanternMask: [0, 0],
+        frenzyPending: [false, false],
+        frenzyEarned: [false, false],
+        frenzyTriggered: [false, false],
+      },
+      kesshu: {
+        tempShield: [false, false],
+        lastStance: [null, null],
+        stanceCount: [0, 0],
+      },
+      genji: {
+        routeChoice: [null, null],
+        balance: [0, 0],
+        grudgeMarks: [0, 0],
+      },
+    },
+    rngSeed: seed,
+    rngState: seed,
     events: [],
     lastRoll: 0,
     history: [],
   };
 }
+

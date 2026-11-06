@@ -1669,3 +1669,65 @@ body.ready .loading-seal {
   }
 }
 
+/* ==========================================================================
+   V1.2 Tactical Choice Modal (旅銭 / 合戦姿勢 / 善悪分岐) & 12-Charm Picker
+   ========================================================================== */
+.tactical-choice-panel {
+  max-width: 680px;
+}
+
+.tactical-choice-preview {
+  background: rgba(242, 227, 194, 0.12);
+  border: 1.5px solid #d4a848;
+  border-radius: 9px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: #f6e7c4;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.tactical-choice-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.tactical-choice-btn {
+  appearance: none;
+  background: #f2e3c2;
+  color: #1c130d;
+  border: 2px solid #8c6a32;
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.tactical-choice-btn:hover {
+  transform: translateY(-2px);
+  border-color: #bf3426;
+  background: #fbf0d5;
+}
+
+.tactical-choice-btn strong {
+  font-size: 17px;
+  color: #9b2217;
+}
+
+.tactical-choice-btn span {
+  font-size: 13px;
+  color: #362518;
+  line-height: 1.4;
+}
+
+.charm-item {
+  cursor: pointer;
+}
+
+

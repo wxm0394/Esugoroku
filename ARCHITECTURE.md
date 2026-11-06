@@ -1,45 +1,46 @@
-# E-Sugoroku Architecture
+# E-Sugoroku Architecture (V1.1–V1.3)
 
-## 1. Design goals
+## 1. Design goals & Canonical Rules Authority
 
-E-Sugoroku is a standalone browser board game built around four deliberately
-different ukiyo-e volumes.  The architecture prioritises:
+E-Sugoroku is a standalone browser tabletop board game built around four
+deliberately different ukiyo-e volumes. See
+[`docs/GAME_DESIGN_SPEC_V1.1-V2.0.md`](docs/GAME_DESIGN_SPEC_V1.1-V2.0.md) for
+the full V1.1–V2.0 game design specification.
 
-1. **Four genuinely different boards** — not one grid with four palettes.
-2. **Rule parity** — the C11 engine and the JavaScript engine must agree on
-   every branch, jump, stay, token gate and win condition.
-3. **Print stability** — the paper board is cached; dice, pieces, previews and
-   landing effects are the only moving layers.
-4. **Offline operation** — no CDN, no remote fonts, no analytics, no external
-   image requests.
-5. **Deterministic browser tests** — a debug surface drives the same public
-   engine used by the UI.
+1. **Four genuinely different boards & volume mechanics** — not one grid with
+   four palettes:
+   - Vol. 1 Tokaido (25 nodes): Gourmet stations (`#2, #7, #12`) & Travel Coins (`旅銭`) to bypass stays/checkpoints.
+   - Vol. 2 Yokai (25 nodes): 4 explicit Ao-Andon lantern nodes (`#4, #10, #16, #22`) & personal Hyakki Yagyo (`×2`/`×3` forward jump multiplier).
+   - Vol. 3 Kesshu (24 nodes): 3 regalia tokens (`兜・太刀・陣太鼓`) & 3 clash combat stances (`猛攻・牽制・固守`).
+   - Vol. 4 Genji (27 nodes): Active route choice at `#15 関屋` (`雅道` good vs `修羅道` evil) & moral balance (`balance`).
+2. **Single Authoritative Browser Rules Engine** — `mobile/js/core.js` +
+   `mobile/js/boards.js` are the sole canonical source of truth for board
+   graphs, 12 charms, fair 1–6 dice (`rollDie`), volume state (`boardState`),
+   and AI tactical heuristics (`aiSelectAction`). `core/esugoroku.c` is retained
+   only as the legacy 17-node C11 prototype.
+3. **Fair Dice & Legal AI Decisions** — both Human and AI roll from the exact
+   same uniform 1–6 generator (`createSeededRng` / `rollDie`). AI never selects
+   dice faces; difficulty levels (`easy`, `normal`, `hard`, `master`) differ
+   solely in how AI evaluates legal pre-roll and pending-choice actions.
+4. **Offline operation & deterministic tests** — no external runtime API calls;
+   `window.__ESR__` and `tools/test_js_rules.mjs` drive the exact same pure
+   rules engine used by the UI.
 
 ```text
-                    ┌──────────────────────────┐
-                    │ core/esugoroku.c         │
-                    │ C11 graph rules + EV AI  │
-                    └────────────┬─────────────┘
-                                 │ mirrored contracts
-                    ┌────────────▼─────────────┐
-                    │ mobile/js/core.js        │
-                    │ JS graph rules + EV AI   │
-                    └────────────┬─────────────┘
+      ┌─────────────────────────────────────────────────────┐
+      │ mobile/js/boards.js                                 │
+      │ 4 node graphs (25/25/24/27) · 36 cards · 12 charms  │
+      └──────────────────────────┬──────────────────────────┘
                                  │
       ┌──────────────────────────▼──────────────────────────┐
-      │ mobile/js/boards.js                                 │
-      │ 4 node graphs · 36 cards · 3 charms · UI metadata   │
+      │ mobile/js/core.js (Canonical Rules Engine)          │
+      │ Fair RNG · 4 volume mechanics · 12 charms · EV AI   │
       └───────────────┬───────────────────────┬─────────────┘
                       │                       │
         ┌─────────────▼────────────┐  ┌───────▼─────────────┐
-        │ board_renderer.js        │  │ main.js             │
-        │ cached print + 3D dice   │  │ loop · physics · AI │
-        └─────────────┬────────────┘  └───────┬─────────────┘
-                      │                       │
-      ┌───────────────▼───────────────────────▼─────────────┐
-      │ ukiyoe_art.js → art_core.js / figures / scenes      │
-      │ washi · bokashi · patterns · figures · scenes       │
-      └─────────────────────────────────────────────────────┘
+        │ tabletop_3d.js           │  │ main.js + state.js  │
+        │ Three.js + Ukiyo-e pass  │  │ HUD · choices · v2  │
+        └──────────────────────────┘  └─────────────────────┘
 ```
 
 ## 2. Stage and coordinate model

@@ -1,97 +1,23 @@
-# E-Sugoroku 验证报告
+# E-Sugoroku 验证报告 (V1.1–V1.3)
 
 **项目**：江戸浮世絵・絵双六（E-Sugoroku）  
-**日期**：2026-10-30  
-**结论**：**全部 PASS**（5/5 suites，290 checks）
+**规格书**：[`docs/GAME_DESIGN_SPEC_V1.1-V2.0.md`](docs/GAME_DESIGN_SPEC_V1.1-V2.0.md)  
+**唯一规则正本**：`mobile/js/core.js` + `mobile/js/boards.js`（四卷 25/25/24/27 格、12 护符、公平骰子、四卷主动战术机制）  
+**C11 原型说明**：`core/esugoroku.c` 作为早期 17〜19 格 C11 原型保留。
 
 ---
 
-## 环境
+## JavaScript 权威规则与几何回归（`node tools/test_js_rules.mjs`）
 
-| 项目 | 版本／路径 |
-|---|---|
-| OS | Linux |
-| Python | 3.13.5 |
-| Node.js | v24.21.0 |
-| C 编译器 | gcc 14.2.0，`-std=c11 -O2 -Wall -Wextra -Werror` |
-| 浏览器 | Chromium 144.0.7559.109（headless） |
-| 驱动 | `/usr/bin/chromedriver` |
-| 预览服务器 | `server.js`，默认 `8090`，零依赖 |
+覆盖范围（40+ 项确定性断言）：
 
----
-
-## 总览
-
-| Suite | Result | Checks |
-|---|---|---:|
-| 目录结构与独立性 | PASS | 26 |
-| JavaScript 语法（`node --check`） | PASS | 13 |
-| C11 规则回归 | PASS | 92 |
-| JS 规则／几何／36 札数据 | PASS | 22 |
-| 浏览器 E2E | PASS | 137 |
-| **合计** | **5/5** | **290** |
-
-执行命令：
-
-```bash
-python3 tools/verify_all.py --browser
-```
-
-服务器响应头：
-
-```http
-HTTP/1.1 200 OK
-Cache-Control: no-store, no-cache, must-revalidate
-Pragma: no-cache
-Expires: 0
-X-Content-Type-Options: nosniff
-Content-Security-Policy: default-src 'self'; ...
-```
-
----
-
-## C11 规则回归（92 checks）
-
-覆盖范围：
-
-- 四卷画帖的节点数、连通性、开始／上り。
-- 巻ノ壱：顺时针移动、泊、名物跳转、终点点点一致、超过反弹。
-- 巻ノ弐：出目 1〜6 的短册查表、后退怪異、妖怪封じ。
-- 巻ノ参：兜／太刀／陣太鼓的 bit mask 收集、未集齐时上り封锁、同格决斗。
-- 巻ノ肆：偶善奇悪分岐、善道捷径、悪道泥舟、戒律。
-- 三枚护符：宿场守り、妖怪封じ、早駕籠。
-- 胜负判定、AI 期望值、终局极大值。
-- 四个内蔵模型的规则差异。
-
-结果：
-
-```text
-E-Sugoroku C11 rules regression suite
--------------------------------------
-Checks: 92, failures: 0
-C rules regression tests passed.
-```
-
----
-
-## JavaScript 规则与几何（22 tests）
-
-覆盖范围：
-
-- 恰好 4 个画帖、36 张唯一锦绘札、3 枚护符。
-- 四张有向图完全连通且可达。
-- 四个版式几何签名互不相同。
-- 巻ノ壱尖头短册、こま絵、赤「泊」印。
-- 巻ノ弐大小错落、约 1.5 倍妖怪格、六面预览。
-- 巻ノ参 `-7°〜+9°` 倾斜、出陣／上り大格、三备え。
-- 巻ノ肆四色短册、善玉／悪玉双轨。
-- 泊、飞、终点反弹、护符、集結、源氏分岐、AI 期望值。
-
-结果：
-
-```text
-22 tests passed, 0 failed.
-```
+- **棋盘与图结构**：4 个画帖（25 / 25 / 24 / 27 格）、36 张唯一锦绘札、12 种怀中护符（每局最多装备 3 枚）、24 项成就。
+- **V1.1 公平骰子与确定性 RNG**：`createSeededRng(seed)` 与 `rollDie(rng)` 保证人类与 AI 完全使用同一 1〜6 均匀骰子，支持同种子确定性回放；`maxPly` 超时按 `progressValue` 结算。
+- **V1.2 卷一（东海道）**：`#2 泥鰌鍋`、`#7 稲荷寿司`、`#12 宇治茶` 收集名物印并获得「旅钱」（每格每名玩家限 1 次），支持消耗 1 枚旅钱免除宿场泊或关所退格。
+- **V1.2 卷二（百种怪谈）**：`#4, #10, #16, #22` 四个独立青行灯节点按玩家分别点亮；集齐四灯后进入个人「百鬼夜行」待机，仅在下一次前进跳跃时触发 `×2`（配合青行灯护符 `×3`），当回合不提前消耗、后退跳跃不误消耗。
+- **V1.2 卷三（英勇揃）**：三备え（兜・太刀・陣太鼓）收集与御前开门检查；同格合战支持 `assault`（猛攻）、`feint`（牵制）、`defend`（固守）三种战术姿态，以及替身符 (`decoy`)、军配印 (`gunbai_seal`) 防御验证。
+- **V1.2 卷四（源氏绘合）**：抵达或经过 `#15 関屋` 时可主动选择 `good`（雅道）或 `evil`（修罗道），不再被奇偶强制绑定；维护 `boardState.genji.balance`。
+- **V1.2/V1.3 公平 AI 与存档迁移**：验证 `easy / normal / hard / master` 四档 AI 仅从合法战术动作中决策、绝不操纵骰子点数；验证 `esugoroku.profile.v1 -> v2` 迁移与对局结算解锁逻辑。
 
 ---
 
