@@ -232,6 +232,9 @@ export const G = {
   hoverPlayBtn: -1,
   hoverSettleBtn: -1,
   humanSide: 0,
+  ruleMode: 'historical', // 'historical' | 'kitsune' | 'legacy'
+  playerCount: 2,         // 2..4
+  tokaidoScale: 'compact', // 'compact' (25 nodes) | 'full53' (55 nodes)
   mode: saved.mode,
   aiDifficulty: saved.aiDifficulty,
   customHandCard: saved.customHandCard,
@@ -243,6 +246,8 @@ export const G = {
   achievements: new Set(saved.achievements),
   records: saved.records,
   match: createMatch(0, {
+    ruleMode: 'historical',
+    playerCount: 2,
     humanSide: 0,
     mode: saved.mode,
     aiDifficulty: saved.aiDifficulty,
@@ -399,6 +404,8 @@ export function resetMatchState(options = {}) {
     : (G.aiDifficulty === 'hard' ? `${board.id}_02` : `${board.id}_01`);
 
   G.match = createMatch(G.boardIdx, {
+    ruleMode: options.ruleMode || G.ruleMode || 'historical',
+    playerCount: options.playerCount || G.playerCount || 2,
     humanSide: G.humanSide,
     mode: G.mode,
     aiDifficulty: G.aiDifficulty,
@@ -625,8 +632,10 @@ export function pawnPosition(side) {
   const pos = G.match?.pos?.[side] ?? board.start;
   const node = board.nodes[pos] || board.nodes[board.goal];
   const base = nodeCenter(node);
-  const sideOffset = side === 0 ? -14 : 14;
-  const stack = side === 0 ? 3 : -3;
+  const offsetsX = [-14, 14, -7, 7];
+  const offsetsY = [3, -3, -9, 9];
+  const sideOffset = offsetsX[side % 4];
+  const stack = offsetsY[side % 4];
   return { x: base.x + sideOffset, y: base.y + node.h * BOARD_SCALE_Y * 0.24 + stack };
 }
 

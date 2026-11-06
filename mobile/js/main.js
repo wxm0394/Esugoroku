@@ -10,7 +10,9 @@ import {
   BOARD_RECT, saveProfile,
 } from './state.js';
 import {
-  BOARDS, UKIYOE_CARDS, CHARMS, CHARM_BY_ID, ACHIEVEMENTS, getCardById, sanitizeCharmLoadout,
+  BOARDS, UKIYOE_CARDS, CHARMS, CHARM_BY_ID, ACHIEVEMENTS,
+  HISTORICAL_KOMA, KITSUNE_KEN_META,
+  getCardById, sanitizeCharmLoadout, setTokaidoRouteScale,
 } from './boards.js';
 import { EsugorokuCore, computeDieTargetEulerYXZ, evaluateDieTopFaceYXZ } from './core.js';
 import { invalidateScene } from './board_renderer.js';
@@ -20,10 +22,10 @@ import { Tabletop3D } from './tabletop_3d.js';
 import { renderNishikieScene, create3DTileCanvas, preloadUkiyoeSheets } from './nishikie_woodblock.js';
 
 const BOARD_STATUS = [
-  ['外周16宿＋内周8宿を進み、京・八百善の上り（#24）を目指す', '名物三宿で旅銭を獲得し、泊や関所を旅銭・通行手形で突破。同じマスで追突合戦！'],
-  ['全25格の百物語大迷宮、出目1〜6の飛び先を読んで上り（#24）へ', '四箇所の青行灯（#4・#10・#16・#22）を全て灯すと次回の前進跳びが「百鬼夜行（2倍/3倍）」に！'],
-  ['三備え（兜・太刀・陣太鼓）を集めて御前大上り（#23）へ', '同格合戦では「猛攻・牽制・固守」の三構えを選択！三備えを揃えて御前を開門せよ！'],
-  ['外周16帖から善悪五帖ずつへ分岐し、源氏絵合の上り（#26）へ', '分岐マス（#15）で金色の雅道か紫の修羅道を主体的に選択！和歌懐紙や運命符で道中を制せよ！'],
+  ['日本橋振出より五十三次を巡り、京都三条大橋・御所の上りを目指す廻り双六', '三重県総合博物館蔵『東海道五十三駅道中記細見雙六』考証：川止め一休・箱根手形戻り・四日市より関へ進む道中指示を体験'],
+  ['振出「百物語」より出目別行先表で怪異を巡り、「古御所の妖猫」上りを目指す飛び双六', '国立歴史民俗博物館・東京学芸大学蔵『百種怪談妖物双六』考証：出目1〜6の行先へ直接飛び、該当なき出目はその場に留まります'],
+  ['源義経・楠木正成・真田幸村ら英雄を「いろは」仮名目印で巡り、大上りを目指す飛び廻り双六', '早稲田大学演劇博物館蔵・芳虎画『英勇揃伊呂波雙六』考証：連続移動と仮名目印の飛躍指示を組み合わせた歴史絵双六'],
+  ['桐壺より須磨・明石・宇治の帖を辿り、六条院「源氏絵合」の上りを目指す飛び廻り双六', '『源氏絵合・奥御殿御祝儀雙六』文学適応：和歌と帖の縁に従い、須磨(#15)で明石路か宇治路を選んで上りを目指します'],
 ];
 
 const KANJI_NUMS = ['', '壱', '弐', '参', '肆', '伍', '陸'];
@@ -119,6 +121,38 @@ function renderDieFaceDOM(value) {
 
 function describeNodeRule(board, node) {
   if (!node) return '';
+  const histMode = EsugorokuCore.isHistoricalMode(G.match);
+  const srcTag = node.sourceNote === 'museum-verified' ? '【史料実在】' : '【歴史様式翻案】';
+  const caption = node.caption || node.rule || '';
+
+  if (histMode) {
+    if (node.kind === 'start') {
+      return `${srcTag}【振出・起点】${caption}（ここから六面骰を振って #${board.goal} の「上り」を目指します）`;
+    }
+    if (node.kind === 'goal') {
+      const bounceNote = board.goalRule?.type === 'exact-bounce'
+        ? '（出目が余った場合は折り返します）'
+        : '（到達すれば直ちに上り勝利となります）';
+      return `${srcTag}【上り・終着】${caption} ${bounceNote}`;
+    }
+    if ((node.movementMode || board.movementMode) === 'tobi' && node.dieDestinations) {
+      const entries = [1, 2, 3, 4, 5, 6].map(d => {
+        const ref = node.dieDestinations[d];
+        if (ref === null || ref === undefined) return `${d}点:留`;
+        const targetNode = board.nodes.find(n => n.slugId === ref || n.id === ref);
+        return `${d}点→#${targetNode ? targetNode.id : ref}${targetNode ? targetNode.title : ''}`;
+      }).join(' ／ ');
+      const instTxt = node.landingInstruction?.text ? ` · 着地指示: ${node.landingInstruction.text}` : '';
+      return `${srcTag}【飛び双六図格】${caption}（出目別行先: ${entries}${instTxt}）`;
+    }
+    if (node.landingInstruction) {
+      const inst = node.landingInstruction;
+      const kanaTag = node.iroha ? `【いろは「${node.iroha}」】` : '';
+      return `${srcTag}${kanaTag}【図格指示: ${inst.text || inst.type}】${caption}`;
+    }
+    return `${srcTag}【道中図格】${caption}`;
+  }
+
   if (node.kind === 'start') {
     return `【振出・起点】${board.title}の出発点です。ここから賽を振って上り（#${board.goal}）を目指します。`;
   }
@@ -206,20 +240,46 @@ function renderTacticalChoiceModal() {
   if (!showForHuman) return;
 
   const board = currentBoard();
-  const sealEl = document.getElementById('choice-modal-seal');
-  const titleEl = document.getElementById('choice-modal-title');
-  const subEl = document.getElementById('choice-modal-sub');
-  const bodyEl = document.getElementById('choice-modal-options');
+  const sealEl = document.getElementById('tactical-choice-badge') || document.getElementById('choice-modal-seal');
+  const titleEl = document.getElementById('tactical-choice-title') || document.getElementById('choice-modal-title');
+  const subEl = document.getElementById('tactical-choice-sub') || document.getElementById('choice-modal-sub');
+  const bodyEl = document.getElementById('tactical-choice-options') || document.getElementById('choice-modal-options');
   if (!bodyEl) return;
   bodyEl.innerHTML = '';
 
+  const histMode = EsugorokuCore.isHistoricalMode(G.match);
   const usedMask = G.match?.charmUsed?.[pc.player] ?? 0;
   const loadout = G.match?.charmLoadout?.[pc.player] || [];
-  const canReroll = loadout.includes('reroll')
-    && (usedMask & (CHARM_BY_ID.reroll?.bit || 0)) === 0
+  const canReroll = !histMode
+    && loadout.includes('reroll')
+    && (usedMask & (CHARM_BY_ID.reroll?.bit || CHARM_BY_ID.reroll?.mask || 0)) === 0
     && (G.match?.rerollsUsedThisTurn || 0) < 1;
 
-  if (pc.type === 'kesshu_stance') {
+  if (pc.type === 'kitsune_ken') {
+    if (sealEl) sealEl.textContent = '🦊 狐拳勝負（しん工夫けん双六）';
+    if (titleEl) titleEl.textContent = `同格遭遇・狐拳（#${pc.pos} ${board.nodes[pc.pos]?.title || ''}）`;
+    if (subEl) subEl.textContent = '安政四年『しん工夫けん双六』規則：狐は庄屋に勝ち、庄屋は猟師に勝ち、猟師は狐に勝ちます。敗者は菓子を1つ渡します（駒の押し戻しはありません）。';
+
+    const hands = [
+      { hand: 'fox', badge: '🦊 狐', title: '狐（きつね）を出す', desc: '庄屋を化かして勝ちますが、猟師の鉄砲には負けます。' },
+      { hand: 'shoya', badge: '👘 庄屋', title: '庄屋（しょうや）を出す', desc: '権威で猟師に勝ちますが、狐には化かされて負けます。' },
+      { hand: 'hunter', badge: '🔫 猟師', title: '猟師（りょうし）を出す', desc: '鉄砲で狐に勝ちますが、庄屋には頭が上がらず負けます。' },
+    ];
+    hands.forEach(item => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tactical-choice-btn';
+      btn.dataset.choiceType = 'kitsune_ken';
+      btn.dataset.hand = item.hand;
+      btn.innerHTML = `<span class="choice-badge">${item.badge}</span><div class="choice-copy"><strong>${item.title}</strong><span>${item.desc}</span></div>`;
+      btn.addEventListener('click', () => {
+        unlockAudioOnce();
+        audio.select();
+        submitTacticalChoice({ type: 'kitsune_ken', hand: item.hand });
+      });
+      bodyEl.appendChild(btn);
+    });
+  } else if (pc.type === 'kesshu_stance') {
     if (sealEl) sealEl.textContent = '戦';
     if (titleEl) titleEl.textContent = `一騎討ち戦術選択（#${pc.square} ${board.nodes[pc.square]?.title || ''}）`;
     if (subEl) subEl.textContent = '相手と同じマスに踏み込みました！合戦の構えを選んでください。';
@@ -229,19 +289,19 @@ function renderTacticalChoiceModal() {
         stance: 'assault',
         badge: '猛 攻',
         title: '⚔️ 猛攻の構え（突撃）',
-        desc: '相手を3格（荒武者Buff・太刀所持でさらに強化）弾き飛ばし、自分が未所持の武具印を1つ奪取します！',
+        desc: '相手を3格弾き飛ばし、自分が未所持の武具印を1つ奪取します！',
       },
       {
         stance: 'feint',
         badge: '牽 制',
         title: '🛡️ 牽制の構え（奇襲＆護り）',
-        desc: '相手を1格押し戻しつつ、自身に「一時鉄壁（次の被追突・奇襲を軽減）」を付与します。',
+        desc: '相手を1格押し戻しつつ、自身に「一時鉄壁」を付与します。',
       },
       {
         stance: 'defend',
         badge: '固 守',
         title: '🏯 固守の構え（武具死守）',
-        desc: '相手を押し戻さない代わりに、自身に「一時鉄壁」を張り、所持している三備えを確実に守ります。',
+        desc: '相手を押し戻さない代わりに、自身に「一時鉄壁」を張り、所持している三備えを守ります。',
       },
     ];
 
@@ -304,24 +364,47 @@ function renderTacticalChoiceModal() {
       bodyEl.appendChild(btn);
     });
   } else if (pc.type === 'genji_branch') {
-    if (sealEl) sealEl.textContent = '岐';
-    if (titleEl) titleEl.textContent = '源氏絵合・善悪二道の選択（#15 関屋）';
-    if (subEl) subEl.textContent = '関屋の分岐点に到達しました。金色の「雅道（善）」か紫の「修羅道（悪）」を選んでください。';
+    if (sealEl) sealEl.textContent = '帖';
+    if (titleEl) {
+      titleEl.textContent = histMode
+        ? '源氏物語五十四帖・須磨の浦よりの進路選択（#15 須磨）'
+        : '源氏絵合・善悪二道の選択（#15 関屋）';
+    }
+    if (subEl) {
+      subEl.textContent = histMode
+        ? '須磨の秋風より、明石・澪標を経て六条院へ還る「明石・都還り路」か、夕霧・宇治十帖を辿る「浮舟・宇治十帖路」を選んでください。'
+        : '関屋の分岐点に到達しました。金色の「雅道（善）」か紫の「修羅道（悪）」を選んでください。';
+    }
 
-    const routes = [
-      {
-        route: 'good',
-        badge: '雅道（善）',
-        title: '🌸 金色の「雅道（善道）」へ進む',
-        desc: '胡蝶の舞など前進跳びが多く、穏やかに上り（#26）へ近づく王道ルートです（善悪天平＋）。',
-      },
-      {
-        route: 'evil',
-        badge: '修羅（悪）',
-        title: '🌑 紫の「修羅道（悪道）」へ進む',
-        desc: '物怪の試練や浮舟の急流跳び（+3格）が待ち受ける波乱の奇襲ルートです（善悪天平−）。',
-      },
-    ];
+    const routes = histMode
+      ? [
+          {
+            route: 'good',
+            badge: '明石路',
+            title: '🌸 明石・都還り路（明石→澪標→松風→薄雲→少女）',
+            desc: '明石の君との契りから澪標の住吉詣でを経て、六条院の絵合（#26）へ進む風雅な都還りルートです。',
+          },
+          {
+            route: 'evil',
+            badge: '宇治路',
+            title: '🌊 浮舟・宇治十帖路（夕霧→柏木→橋姫→早蕨→浮舟）',
+            desc: '夕霧・柏木から宇治川の橋姫・浮舟の帖を巡り、六条院の絵合（#26）へ合流する物語ルートです。',
+          },
+        ]
+      : [
+          {
+            route: 'good',
+            badge: '雅道（善）',
+            title: '🌸 金色の「雅道（善道）」へ進む',
+            desc: '胡蝶の舞など前進跳びが多く、穏やかに上り（#26）へ近づく王道ルートです（善悪天平＋）。',
+          },
+          {
+            route: 'evil',
+            badge: '修羅（悪）',
+            title: '🌑 紫の「修羅道（悪道）」へ進む',
+            desc: '物怪の試練や浮舟の急流跳び（+3格）が待ち受ける波乱の奇襲ルートです（善悪天平−）。',
+          },
+        ];
 
     routes.forEach(item => {
       const btn = document.createElement('button');
@@ -418,6 +501,23 @@ function syncHudDOM() {
   });
   audio.setBgmBoard(board.id);
 
+  // Sync Rule Mode, Player Count, and Tokaido Scale controls in topbar
+  const ruleSelect = document.getElementById('select-rule-mode');
+  if (ruleSelect) {
+    const curRule = G.match?.ruleMode || G.ruleMode || 'historical';
+    if (ruleSelect.value !== curRule) ruleSelect.value = curRule;
+  }
+  const countSelect = document.getElementById('select-player-count');
+  if (countSelect) {
+    const curCount = String(G.match?.playerCount || G.playerCount || 2);
+    if (countSelect.value !== curCount) countSelect.value = curCount;
+  }
+  const scaleBtn = document.getElementById('btn-tokaido-scale');
+  if (scaleBtn) {
+    const curScale = BOARDS[0]?.tokaidoScale || G.tokaidoScale || 'compact';
+    scaleBtn.textContent = curScale === 'full53' ? '🗾 東海道: 53次完本(55格)' : '🗾 東海道: 25格略式';
+  }
+
   // Sync AI difficulty select in topbar
   const diffSelect = document.getElementById('select-ai-difficulty');
   if (diffSelect) {
@@ -456,13 +556,13 @@ function syncHudDOM() {
       badgeEl.textContent = '🏃 駒移動中';
       badgeEl.style.background = '#2b6e52';
     } else if (G.match?.pendingChoice) {
-      badgeEl.textContent = '⚡ 戦術決断';
+      badgeEl.textContent = '⚡ 盤上選択';
       badgeEl.style.background = '#8e2a59';
     } else if (isHumanTurn) {
       badgeEl.textContent = 'あなたの手番';
       badgeEl.style.background = '#bf3426';
     } else {
-      badgeEl.textContent = '相手の手番';
+      badgeEl.textContent = `同行者(${G.match ? G.match.turn + 1 : 2}番)の手番`;
       badgeEl.style.background = '#1d5478';
     }
     mainEl.textContent = G.statusText || BOARD_STATUS[G.boardIdx][0];
@@ -473,52 +573,89 @@ function syncHudDOM() {
   const volTitle = document.getElementById('dock-volume-title');
   const ruleTag = document.getElementById('dock-rule-tag');
   if (volTitle) volTitle.textContent = `${board.volume}・${board.title}`;
-  if (ruleTag) ruleTag.textContent = board.ruleBrief || board.ruleSummary;
+  if (ruleTag) {
+    const rMode = G.match?.ruleMode || G.ruleMode || 'historical';
+    if (rMode === 'kitsune') {
+      ruleTag.textContent = 'しん工夫けん双六（安政四年・狐拳特別盤）';
+    } else if (rMode === 'historical') {
+      ruleTag.textContent = `${board.styleLabel} · 史料考証モード`;
+    } else {
+      ruleTag.textContent = `${board.styleLabel} · 旧版戦術拡張`;
+    }
+  }
 
   if (G.match) {
-    const human = G.match.humanSide;
-    const ai = 1 - human;
-    const hNode = board.nodes[G.match.pos[human]] || board.nodes[0];
-    const aNode = board.nodes[G.match.pos[ai]] || board.nodes[0];
+    const human = G.match.humanSide ?? 0;
+    const pCount = Math.max(2, Math.min(4, G.match.playerCount || G.playerCount || 2));
+    const rMode = G.match.ruleMode || G.ruleMode || 'historical';
 
-    const row0 = document.getElementById('player-row-0');
-    const row1 = document.getElementById('player-row-1');
-    const tag0 = document.getElementById('turn-tag-0');
-    const tag1 = document.getElementById('turn-tag-1');
-    const pos0 = document.getElementById('player-pos-0');
-    const pos1 = document.getElementById('player-pos-1');
+    for (let side = 0; side < 4; side++) {
+      const rowEl = document.getElementById(`player-row-${side}`);
+      const tagEl = document.getElementById(`turn-tag-${side}`);
+      const posEl = document.getElementById(`player-pos-${side}`);
+      const labelEl = document.getElementById(`player-label-${side}`);
+      const swatchEl = document.getElementById(`pawn-swatch-${side}`);
+      if (!rowEl) continue;
 
-    const humanTurn = G.match.turn === human;
-    if (row0) row0.classList.toggle('active', humanTurn);
-    if (row1) row1.classList.toggle('active', !humanTurn);
-    if (tag0) tag0.classList.toggle('hidden', !humanTurn);
-    if (tag1) tag1.classList.toggle('hidden', humanTurn);
-    if (pos0) {
-      const skipTxt = G.match.skip[human] > 0 ? ` (休み${G.match.skip[human]})` : '';
-      pos0.textContent = `現在地: #${hNode.id} ${hNode.title}${skipTxt}`;
-    }
-    if (pos1) {
-      const skipTxt = G.match.skip[ai] > 0 ? ` (休み${G.match.skip[ai]})` : '';
-      pos1.textContent = `現在地: #${aNode.id} ${aNode.title}${skipTxt}`;
+      const visible = side < pCount;
+      rowEl.classList.toggle('hidden', !visible);
+      if (!visible) continue;
+
+      const isTurn = G.match.turn === side;
+      rowEl.classList.toggle('active', isTurn);
+      if (tagEl) {
+        tagEl.classList.toggle('hidden', !isTurn);
+        tagEl.textContent = side === human ? '手番中' : '番';
+      }
+      const komaMeta = HISTORICAL_KOMA[side % HISTORICAL_KOMA.length];
+      if (swatchEl && komaMeta) {
+        swatchEl.textContent = komaMeta.seal || komaMeta.shortName?.slice(0, 1) || '駒';
+      }
+      if (labelEl && komaMeta) {
+        labelEl.textContent = side === human
+          ? `あなた（${komaMeta.name}）`
+          : `同行者・${KANJI_NUMS[side + 1]}（${komaMeta.name}）`;
+      }
+      if (posEl) {
+        const pNode = board.nodes[G.match.pos[side]] || board.nodes[0];
+        const skipTxt = (G.match.skip[side] | 0) > 0 ? ` · 休み${G.match.skip[side]}` : '';
+        const kashiTxt = rMode === 'kitsune'
+          ? ` · 🍡菓子${G.match.kashi?.[side] ?? 5} · ${(G.match.direction?.[side] ?? 1) > 0 ? '順' : '逆'}`
+          : '';
+        posEl.textContent = `#${pNode.id} ${pNode.title}${skipTxt}${kashiTxt}`;
+      }
     }
 
     const meterEl = document.getElementById('board-special-meter');
     if (meterEl) {
       const remain = Math.max(0, board.goal - G.match.pos[human]);
-      const duels = G.match.duelCount || G.stats.duels || 0;
-      const plyText = `手数 ${G.match.ply || 0}/${G.match.maxPly || 80}`;
-      if (board.id === 'tokaido') {
-        const coins = G.match.boardState?.tokaido?.coins?.[human] || 0;
-        meterEl.textContent = `🍱 名物: ${G.tokaidoGourmet.length}/3 · 🪙 旅銭: ${coins}枚 · ⚔️ 追突: ${duels}回 · 残り${remain}格 (${plyText})`;
-      } else if (board.id === 'yokai') {
-        const lit = 4 - G.yokaiLanterns;
-        meterEl.textContent = `🏮 青行灯: ${lit}/4灯点灯 ${G.yokaiFrenzy ? '【百鬼夜行待機！】' : ''} · ⚔️ 追突: ${duels}回 · 残り${remain}格 (${plyText})`;
-      } else if (board.id === 'kesshu') {
-        const shield = G.match.boardState?.kesshu?.tempShield?.[human] ? '🛡️鉄壁 ' : '';
-        meterEl.textContent = `⚔️ 討入備え: ${G.kesshuPieces}/3 ${shield}· 一騎討ち: ${duels}回 · 残り${remain}格 (${plyText})`;
+      const plyText = `手数 ${G.match.ply || 0}/${G.match.maxPly || 120}`;
+      if (rMode === 'kitsune') {
+        const kashiSummary = Array.from({ length: pCount }, (_, s) => `${HISTORICAL_KOMA[s]?.shortName || HISTORICAL_KOMA[s]?.seal || s + 1}:${G.match.kashi?.[s] ?? 5}`).join(' ');
+        meterEl.textContent = `🦊 しん工夫けん双六 · 菓子[${kashiSummary}] · 狐拳:${G.match.kitsuneCount || 0}回 · 残り${remain}格 (${plyText})`;
+      } else if (rMode === 'historical') {
+        const modeNames = {
+          mawari: '廻り双六（順路移動・点点一致）',
+          tobi: '飛び双六（出目別行先表・該当なき出目は留まる）',
+          'tobi-mawari': '飛び廻り双六（順路＋図格飛躍指示）',
+        };
+        const mLabel = modeNames[board.movementMode] || board.styleLabel;
+        meterEl.textContent = `📜 ${mLabel} · ${pCount}人同格共存 · 上りまで残り${remain}格 (${plyText})`;
       } else {
-        const mood = G.genjiBalance > 0 ? `雅道(+${G.genjiBalance})` : G.genjiBalance < 0 ? `修羅(${G.genjiBalance})` : '中庸(0)';
-        meterEl.textContent = `☯️ 天平: ${mood} · ⚔️ 追突: ${duels}回 · 残り${remain}格 (${plyText})`;
+        const duels = G.match.duelCount || G.stats.duels || 0;
+        if (board.id === 'tokaido') {
+          const coins = G.match.boardState?.tokaido?.coins?.[human] || 0;
+          meterEl.textContent = `🍱 名物: ${G.tokaidoGourmet.length}/3 · 🪙 旅銭: ${coins}枚 · ⚔️ 追突: ${duels}回 · 残り${remain}格 (${plyText})`;
+        } else if (board.id === 'yokai') {
+          const lit = 4 - G.yokaiLanterns;
+          meterEl.textContent = `🏮 青行灯: ${lit}/4灯点灯 ${G.yokaiFrenzy ? '【百鬼夜行待機！】' : ''} · ⚔️ 追突: ${duels}回 · 残り${remain}格 (${plyText})`;
+        } else if (board.id === 'kesshu') {
+          const shield = G.match.boardState?.kesshu?.tempShield?.[human] ? '🛡️鉄壁 ' : '';
+          meterEl.textContent = `⚔️ 討入備え: ${G.kesshuPieces}/3 ${shield}· 一騎討ち: ${duels}回 · 残り${remain}格 (${plyText})`;
+        } else {
+          const mood = G.genjiBalance > 0 ? `雅道(+${G.genjiBalance})` : G.genjiBalance < 0 ? `修羅(${G.genjiBalance})` : '中庸(0)';
+          meterEl.textContent = `☯️ 天平: ${mood} · ⚔️ 追突: ${duels}回 · 残り${remain}格 (${plyText})`;
+        }
       }
     }
 
@@ -533,19 +670,19 @@ function syncHudDOM() {
     const inspDesc = document.getElementById('insp-desc');
 
     if (inspId) inspId.textContent = `#${inspNode.id}`;
-    if (inspTitle) inspTitle.textContent = inspNode.title;
+    if (inspTitle) {
+      const irohaPrefix = inspNode.iroha ? `【${inspNode.iroha}】` : '';
+      inspTitle.textContent = `${irohaPrefix}${inspNode.title}`;
+    }
     if (inspKind) {
-      const kindNames = {
-        start: '振出・起点',
-        goal: '大上り・終着',
-        jump: (inspNode.jumpTable?.[0] || 0) < 0 ? '関所・奇襲' : (inspNode.gourmetBit ? '名物宿・跳び' : '名物跳び'),
-        stay: '宿場泊',
-        branch: '善悪分岐',
-        good: '善玉雅道',
-        evil: '悪玉修羅道',
-        normal: inspNode.tokens ? '討入備え' : inspNode.lanternBit ? '青行灯マス' : '道中宿場',
-      };
-      inspKind.textContent = kindNames[inspNode.kind] || '道中';
+      const srcLabel = inspNode.sourceNote === 'museum-verified' ? '史料実在' : '歴史翻案';
+      if (inspNode.kind === 'start') inspKind.textContent = `振出・${srcLabel}`;
+      else if (inspNode.kind === 'goal') inspKind.textContent = `上り・${srcLabel}`;
+      else if (inspNode.landingInstruction?.type === 'rest') inspKind.textContent = `一休・${srcLabel}`;
+      else if (inspNode.landingInstruction?.type === 'returnTo') inspKind.textContent = `戻り・${srcLabel}`;
+      else if (inspNode.landingInstruction?.type === 'moveTo') inspKind.textContent = `飛躍・${srcLabel}`;
+      else if ((inspNode.movementMode || board.movementMode) === 'tobi') inspKind.textContent = `飛び図格・${srcLabel}`;
+      else inspKind.textContent = `図格・${srcLabel}`;
     }
     if (inspDesc) inspDesc.textContent = describeNodeRule(board, inspNode);
 
@@ -578,9 +715,15 @@ function syncHudDOM() {
         handSealEl.style.background = handCard.buff.color || '#bf3426';
       }
       if (handTitleEl) handTitleEl.textContent = `自定义手札: ${handCard.title}`;
-      if (handBuffEl) handBuffEl.textContent = `${handCard.buff.name.replace('の加護', '')}: ${handCard.buff.shortDesc}`;
+      if (handBuffEl) {
+        handBuffEl.textContent = EsugorokuCore.isHistoricalMode(G.match)
+          ? `鑑賞錦絵（${handCard.artist}）· 旧版モードで加護発動`
+          : `${handCard.buff.name.replace('の加護', '')}: ${handCard.buff.shortDesc}`;
+      }
       if (handBadgeEl) {
-        handBadgeEl.textContent = preGame ? '開幕前変更可' : '加護発動中';
+        handBadgeEl.textContent = EsugorokuCore.isHistoricalMode(G.match)
+          ? '図鑑鑑賞'
+          : (preGame ? '開幕前変更可' : '加護発動中');
       }
       const thumbKey = `${handCard.id}-${G.printsReadyTick || 0}`;
       if (handCanvasEl && lastHandThumbKey !== thumbKey) {
@@ -595,30 +738,51 @@ function syncHudDOM() {
     const lobbyHandName = document.getElementById('lobby-hand-card-name');
     const lobbyHandDesc = document.getElementById('lobby-hand-card-desc');
     if (handCard && handCard.buff) {
-      if (lobbyHandName) lobbyHandName.textContent = `${handCard.title}（${handCard.buff.name}）`;
-      if (lobbyHandDesc) lobbyHandDesc.textContent = `${handCard.buff.shortDesc} · 護符: ${sanitizeCharmLoadout(G.charms).map(id => CHARM_BY_ID[id]?.name).join(' / ')}`;
+      if (lobbyHandName) lobbyHandName.textContent = `${handCard.title}（${handCard.artist}）`;
+      if (lobbyHandDesc) {
+        lobbyHandDesc.textContent = EsugorokuCore.isHistoricalMode(G.match)
+          ? `歴史絵双六モード（1個の六面骰・同格共存・図格指示1回実行） · 蒐集錦絵: ${G.collection.size}/36枚`
+          : `${handCard.buff.shortDesc} · 護符: ${sanitizeCharmLoadout(G.charms).map(id => CHARM_BY_ID[id]?.name).join(' / ')}`;
+      }
     }
 
-    // Tactical Gale Strike Button state (uses unified EsugorokuCore.canUseTacticalStrike)
+    // Secondary Action Button (#btn-strike):
+    //   - In `kitsune` mode: toggles forward/backward traversal (順回り / 逆回り)
+    //   - In `historical` mode: displays peaceful historical rule status
+    //   - In `legacy` mode: triggers Tactical Gale Strike
     const strikeBtn = document.getElementById('btn-strike');
+    const strikeMain = strikeBtn?.querySelector('.strike-main');
     const strikeSub = document.getElementById('strike-sub-text');
     if (strikeBtn && strikeSub) {
       const activeSide = G.match.turn;
-      const oppSide = 1 - activeSide;
-      const cd = G.match.strikeCooldown?.[activeSide] || 0;
-      const oppPos = G.match.pos[oppSide] || 0;
-      const pullDist = 2 + (G.match.playerBuffs?.[activeSide]?.strikePullBonus || G.match.customBuff?.strikePullBonus || 0);
-      const canStrike = G.screen === 'PLAYING'
-        && G.phase === 'ROLL'
-        && isSideControlledByHuman(activeSide)
-        && EsugorokuCore.canUseTacticalStrike(board, G.match, activeSide);
-      strikeBtn.disabled = !canStrike;
-      if (cd > 0) {
-        strikeSub.textContent = `再充填あと${cd}手`;
-      } else if (oppPos <= 0) {
-        strikeSub.textContent = '相手が起点に待機中';
+      if (rMode === 'kitsune') {
+        const curDir = G.match.direction?.[activeSide] ?? 1;
+        strikeBtn.disabled = !(G.screen === 'PLAYING' && G.phase === 'ROLL' && isSideControlledByHuman(activeSide));
+        if (strikeMain) strikeMain.textContent = curDir > 0 ? '🔄 進路: 順回り' : '🔄 進路: 逆回り';
+        strikeSub.textContent = 'クリックで順回り・逆回りを切替';
+      } else if (rMode === 'historical') {
+        strikeBtn.disabled = true;
+        if (strikeMain) strikeMain.textContent = `📜 ${board.styleLabel}`;
+        strikeSub.textContent = '同格共存・図格指示に従う';
       } else {
-        strikeSub.textContent = `相手(#${oppPos})を-${pullDist}格戻す`;
+        const oppSide = 1 - activeSide;
+        const cd = G.match.strikeCooldown?.[activeSide] || 0;
+        const oppPos = G.match.pos[oppSide] || 0;
+        const pullDist = 2 + (G.match.playerBuffs?.[activeSide]?.strikePullBonus || G.match.customBuff?.strikePullBonus || 0);
+        const strikeCheck = EsugorokuCore.canUseTacticalStrike(board, G.match, activeSide);
+        const canStrike = G.screen === 'PLAYING'
+          && G.phase === 'ROLL'
+          && isSideControlledByHuman(activeSide)
+          && Boolean(strikeCheck.ok);
+        strikeBtn.disabled = !canStrike;
+        if (strikeMain) strikeMain.textContent = '🌪️ 辻風奇襲';
+        if (cd > 0) {
+          strikeSub.textContent = `再充填あと${cd}手`;
+        } else if (oppPos <= 0) {
+          strikeSub.textContent = '相手が起点に待機中';
+        } else {
+          strikeSub.textContent = `相手(#${oppPos})を-${pullDist}格戻す`;
+        }
       }
     }
 
@@ -986,7 +1150,40 @@ function handleEvents(result, roll) {
   let usedJump = false;
 
   for (const ev of result.events) {
-    if (ev.type === 'jump') {
+    if (ev.type === 'tobi_stay') {
+      audio.stay();
+      showStamp('出目留まり', `出目 ${roll} は行先なし`);
+      showToast(
+        `🎲 出目「${KANJI_NUMS[roll]} (${roll}点)」は対応する飛び先がないため、この図格に留まります`,
+        '飛び双六（百種怪談妖物双六）の古法規則',
+      );
+    } else if (ev.type === 'landing_instruction') {
+      if (ev.instructionType === 'rest') {
+        audio.stay();
+        showStamp('一休止', ev.text || '一休');
+        showToast(`🏮 図格指示：${ev.text || `${ev.turns}手休み`}`, board.nodes[ev.from]?.title || '');
+      } else {
+        usedJump = true;
+        G.stats.jumps++;
+        audio.jump();
+        const kanaBadge = ev.kana ? `【${ev.kana}】` : '';
+        showStamp('図格飛躍', `${kanaBadge}${board.nodes[ev.to]?.title || ''}`);
+        showToast(
+          `📜 図格指示：${ev.text || `${board.nodes[ev.from]?.title || ''} → ${board.nodes[ev.to]?.title || ''}`}`,
+          `${board.nodes[ev.from]?.title || ''} → #${ev.to} ${board.nodes[ev.to]?.title || ''}`,
+        );
+      }
+    } else if (ev.type === 'kitsune_ken') {
+      audio.duel();
+      const pHand = KITSUNE_KEN_META[ev.playerHand]?.name || ev.playerHand;
+      const oHand = KITSUNE_KEN_META[ev.opponentHand]?.name || ev.opponentHand;
+      const winKoma = HISTORICAL_KOMA[ev.winner % HISTORICAL_KOMA.length]?.name || '勝者';
+      showStamp('狐拳勝負', `${pHand} 対 ${oHand}`);
+      showToast(
+        `🦊 狐拳勝負！【${pHand} 対 ${oHand}】${winKoma}の勝ち！敗者より菓子1個を受け取りました`,
+        '安政四年『しん工夫けん双六』（狐拳名所双六）',
+      );
+    } else if (ev.type === 'jump' && !result.events.some(e => e.type === 'landing_instruction')) {
       usedJump = true;
       G.stats.jumps++;
       audio.jump();
@@ -996,26 +1193,27 @@ function handleEvents(result, roll) {
       showToast('↩️ 上りを超過 ─ 点点一致のため折り返し', 'ぴったり止まると大上り達成');
     } else if (ev.type === 'token') {
       audio.token();
-      showStamp('討入備え', ev.label || '義士印');
-      showToast(`⚔️ 討入備え「${ev.label || '印'}」を獲得！`, '三つ揃えば御前の上りが開門');
-    } else if (ev.type === 'stay') {
+      showStamp('名所印', ev.label || '印');
+    } else if (ev.type === 'stay' && !result.events.some(e => e.type === 'landing_instruction')) {
       audio.stay();
       showToast(`🏮 宿場泊 ─ ${ev.turns} 手休み`, board.nodes[ev.to]?.title || '');
     } else if (ev.type === 'gourmet') {
       audio.token();
-      showStamp('宿場名物', `${board.nodes[ev.square]?.title || '名物'}＋旅銭1枚`);
-      showToast(`🍱 宿場名物「${board.nodes[ev.square]?.title || ''}」を堪能！旅銭＋1枚（計${ev.coins}枚）`, '旅銭は宿場泊や関所の突破に使えます');
+      if (!EsugorokuCore.isHistoricalMode(G.match)) {
+        showStamp('宿場名物', `${board.nodes[ev.square]?.title || '名物'}＋旅銭1枚`);
+        showToast(`🍱 宿場名物「${board.nodes[ev.square]?.title || ''}」を堪能！旅銭＋1枚（計${ev.coins}枚）`, '旅銭は宿場泊や関所の突破に使えます');
+      }
     } else if (ev.type === 'coin_spent') {
       audio.charm();
-      showToast(`🪙 旅銭を1枚支払い、${ev.reason === 'stay' ? '宿場泊' : '関所の押し戻し'}を突破！（残り${ev.coinsLeft}枚）`, '東海道・旅銭の知恵');
+      showToast(`🪙 旅銭を1枚支払い、${ev.reason === 'stay' ? '宿場泊' : '関所の押し戻し'}を突破！`, '東海道・旅銭の知恵');
     } else if (ev.type === 'lantern') {
       audio.lantern();
-      const litCount = [1, 2, 4, 8].filter(b => (ev.mask & b) !== 0).length;
-      showToast(`🏮 青行灯マス（#${ev.square}）を点灯！（${litCount} / 4 灯）`, '四灯すべて灯すと次回の前進跳びが百鬼夜行（2倍/3倍）に！');
+      const litCount = [1, 2, 4, 8].filter(b => (ev.lanternMask & b) !== 0).length;
+      showToast(`🏮 青行灯マスを点灯！（${litCount} / 4 灯）`, '四灯すべて灯すと次回の前進跳びが百鬼夜行に！');
     } else if (ev.type === 'frenzy_ready') {
       audio.lantern();
       showStamp('百鬼夜行', '次回の前進怪異跳びが倍化！');
-      showToast('🏮 四つの青行灯が揃った！「百鬼夜行」待機状態に突入！', '次回の前進ジャンプ距離が2倍（青行灯護符なら3倍）になります！');
+      showToast('🏮 四つの青行灯が揃った！「百鬼夜行」待機状態に突入！', '次回の前進ジャンプ距離が2倍になります！');
     } else if (ev.type === 'frenzy_used') {
       audio.jump();
       showStamp('百鬼夜行発動', `飛距離 ${ev.multiplier} 倍！`);
@@ -1057,11 +1255,17 @@ function handleEvents(result, roll) {
       showStamp('御前返し', `備え ${ev.required} 枚が必要`);
       showToast('🔒 御前の上りはまだ開かない！', '先に兜・太刀・陣太鼓を三つ揃えよう');
     } else if (ev.type === 'branch_good') {
-      showToast('🌸 金色の「雅道（善道）」へ進む！', '近道・前進ルートへ入りました');
+      showToast(
+        EsugorokuCore.isHistoricalMode(G.match) ? '🌸 明石・都還り路へ進む！' : '🌸 金色の「雅道（善道）」へ進む！',
+        '須磨より明石・澪標を経て六条院へ',
+      );
     } else if (ev.type === 'branch_evil') {
-      showToast('🌑 紫の「修羅道（悪道）」へ進む！', '波乱の奇襲ルートへ入りました');
+      showToast(
+        EsugorokuCore.isHistoricalMode(G.match) ? '🌊 浮舟・宇治十帖路へ進む！' : '🌑 紫の「修羅道（悪道）」へ進む！',
+        '夕霧・橋姫・浮舟の帖を経て六条院へ',
+      );
     } else if (ev.type === 'skip') {
-      showToast('🏮 宿場泊のためこの手番は一休み', '次の手番から再開します');
+      showToast('🏮 一休みのためこの手番は留まります', '次の手番から再開します');
     } else if (ev.type === 'timeout') {
       showStamp('規定手数到達', '盤面優勢判定');
       showToast('⏱️ 規定手数（maxPly）に到達！盤面進行度により勝敗が決しました', '長期戦の決着');
@@ -1150,12 +1354,20 @@ function pathToPoints(board, indexes, side) {
 function beginMove(result, roll, oldState) {
   const board = currentBoard();
   const mover = oldState.turn;
+  const moveEv = result.events.find(e => e.type === 'move');
+  const tobiStayEv = result.events.find(e => e.type === 'tobi_stay');
   const hist = result.state.history?.[result.state.history.length - 1];
   const skipped = result.events.some(e => e.type === 'skip');
   const steps = skipped ? 0 : (hist?.steps || roll);
-  let indexes = board.style === 'tobi'
-    ? [oldState.pos[mover], result.state.pos[mover]]
-    : simulateWalk(board, oldState.pos[mover], steps, roll, oldState);
+
+  let indexes;
+  if (Array.isArray(moveEv?.path) && moveEv.path.length > 0) {
+    indexes = [...moveEv.path];
+  } else if (board.style === 'tobi' || board.movementMode === 'tobi') {
+    indexes = [oldState.pos[mover], result.state.pos[mover]];
+  } else {
+    indexes = simulateWalk(board, oldState.pos[mover], steps, roll, oldState);
+  }
 
   const jump = result.events.find(e => e.type === 'jump');
   if (jump && indexes[indexes.length - 1] !== jump.to) indexes.push(jump.to);
@@ -1164,14 +1376,23 @@ function beginMove(result, roll, oldState) {
   if (indexes.length < 2) indexes = [oldState.pos[mover], final];
 
   const path = pathToPoints(board, indexes, mover);
-  const dur = Math.max(480, Math.min(2200, (indexes.length - 1) * 240 + (jump ? 320 : 0)));
+  const dur = tobiStayEv
+    ? 360
+    : Math.max(480, Math.min(2200, (indexes.length - 1) * 240 + (jump ? 320 : 0)));
   G.pieceAnim = { side: mover, path, indexes, t0: performance.now(), duration: dur, lastSeg: -1 };
   G.pendingResult = { result, roll, preRollState: oldState };
   G.phase = 'MOVE';
-  setStatus(
-    `出目「${KANJI_NUMS[roll]} (${roll}点)」に従って駒が ${indexes.length - 1} 歩進みます`,
-    `${board.nodes[oldState.pos[mover]]?.title || ''} → ${board.nodes[final]?.title || ''}`,
-  );
+  if (tobiStayEv) {
+    setStatus(
+      `出目「${KANJI_NUMS[roll]} (${roll}点)」は対応する行先がないため、#${final} ${board.nodes[final]?.title || ''} に留まります`,
+      '飛び双六（百種怪談妖物双六）の出目行先規則',
+    );
+  } else {
+    setStatus(
+      `出目「${KANJI_NUMS[roll]} (${roll}点)」に従って駒が ${board.nodes[final]?.title || `#${final}`} へ進みます`,
+      `${board.nodes[oldState.pos[mover]]?.title || ''} → ${board.nodes[final]?.title || ''}`,
+    );
+  }
 }
 
 let turnSweepTimeout = 0;
@@ -1685,6 +1906,30 @@ function triggerTacticalStrike() {
   const actor = G.match.turn;
   if (!isSideControlledByHuman(actor)) return false;
   const board = currentBoard();
+
+  // In Kitsune-ken special mode, #btn-strike toggles forward / backward traversal (順回り / 逆回り)
+  if ((G.match.ruleMode || G.ruleMode) === 'kitsune') {
+    const curDir = G.match.direction?.[actor] ?? 1;
+    const nextDir = curDir > 0 ? -1 : 1;
+    const res = EsugorokuCore.applyChoice(board, G.match, {
+      type: 'kitsune_direction',
+      player: actor,
+      direction: nextDir,
+    });
+    if (res.ok) {
+      G.match = res.state;
+      audio.select();
+      showStamp(nextDir > 0 ? '順回り' : '逆回り', 'しん工夫けん双六・進路転換');
+      showToast(
+        `🦊 進路を「${nextDir > 0 ? '順回り（上り方向）' : '逆回り（振出方向）'}」に切り替えました`,
+        '安政四年『しん工夫けん双六』の双方向移動規則',
+      );
+      syncHudDOM();
+      return true;
+    }
+    return false;
+  }
+
   const res = EsugorokuCore.applyTacticalStrike(board, G.match, actor);
   if (!res.ok) return false;
   G.match = res.state;
@@ -1707,6 +1952,31 @@ function setupDOMControls() {
     });
   });
 
+  // Rule Mode Selector ('historical' | 'kitsune' | 'legacy')
+  const ruleSelect = document.getElementById('select-rule-mode');
+  ruleSelect?.addEventListener('change', () => {
+    unlockAudioOnce();
+    window.__ESR__.setRuleMode(ruleSelect.value);
+    audio.paper();
+  });
+
+  // Player Count Selector (2..4)
+  const countSelect = document.getElementById('select-player-count');
+  countSelect?.addEventListener('change', () => {
+    unlockAudioOnce();
+    window.__ESR__.setPlayerCount(Number(countSelect.value) || 2);
+    audio.paper();
+  });
+
+  // Tokaido Route Scale Toggle ('compact' 25 nodes vs 'full53' 55 nodes)
+  const scaleBtn = document.getElementById('btn-tokaido-scale');
+  scaleBtn?.addEventListener('click', () => {
+    unlockAudioOnce();
+    const nextScale = (BOARDS[0]?.tokaidoScale || G.tokaidoScale) === 'full53' ? 'compact' : 'full53';
+    window.__ESR__.setTokaidoScale(nextScale);
+    audio.paper();
+  });
+
   // AI Difficulty & Local 2P selector in Top Bar
   const diffSelect = document.getElementById('select-ai-difficulty');
   diffSelect?.addEventListener('change', () => {
@@ -1715,7 +1985,7 @@ function setupDOMControls() {
     if (val === 'local2p') {
       G.mode = 'local2p';
       if (G.match) G.match.mode = 'local2p';
-      showToast('👥 同席二人対戦モードに切り替えました', '先手・後手ともに手動で賽と戦術を操作します');
+      showToast('👥 同席対戦モードに切り替えました', '各手番を順番に手動で操作します');
     } else {
       G.mode = 'ai';
       G.aiDifficulty = val;
@@ -2052,6 +2322,7 @@ function snapshot() {
   const handCard = currentHandCard();
   if (G.match) syncDerivedHudFromMatch(G.match);
   const signature = board.nodes.map(n => `${Math.round(n.x)},${Math.round(n.y)},${Math.round(n.w)},${Math.round(n.h)}`).join('|');
+  const ruleMode = G.match?.ruleMode || G.ruleMode || 'historical';
   return {
     screen: G.screen,
     phase: G.phase,
@@ -2061,18 +2332,33 @@ function snapshot() {
     style: board.style,
     shape: board.shape,
     title: board.title,
+    movementMode: EsugorokuCore.getEffectiveMovementMode(board, G.match),
+    ruleMode,
+    playerCount: G.match?.playerCount || G.playerCount || 2,
+    allowSharedSquare: Boolean(board.allowSharedSquare),
+    tokaidoScale: board.tokaidoScale || G.tokaidoScale || 'compact',
+    historicalSource: board.historicalSource || null,
+    startNodeId: board.startNodeId,
+    goalNodeId: board.goalNodeId,
+    goalRule: board.goalRule || null,
+    nodeCount: board.nodes.length,
     uiSkin: board.ui.skin,
     panelTitle: board.ui.panelTitle,
     hud: board.ui.hud,
     diceDevice: board.ui.diceDevice,
     diceShape: board.ui.diceShape,
-    requiredTokens: board.requiredTokens,
+    requiredTokens: ruleMode === 'legacy' ? board.requiredTokens : (board.historicalRequiredTokens ?? 0),
     start: board.start,
     goal: board.goal,
     geometrySignature: signature,
     nodeRects: board.nodes.map(n => ({
-      id: n.id, x: n.x, y: n.y, w: n.w, h: n.h, kind: n.kind,
-      tilt: n.tilt || 0, title: n.title, jumpTable: n.jumpTable,
+      id: n.id, slugId: n.slugId, x: n.x, y: n.y, w: n.w, h: n.h, kind: n.kind,
+      tilt: n.tilt || 0, title: n.title, reading: n.reading,
+      movementMode: n.movementMode,
+      jumpTable: n.jumpTable,
+      dieDestinations: n.dieDestinations || null,
+      landingInstruction: n.landingInstruction || null,
+      sourceNote: n.sourceNote || null,
       tokens: n.tokens, stripColor: n.stripColor || null,
     })),
     humanSide: G.match?.humanSide,
@@ -2082,6 +2368,11 @@ function snapshot() {
     pos: G.match ? [...G.match.pos] : [],
     tokens: G.match ? [...G.match.tokens] : [],
     skip: G.match ? [...G.match.skip] : [],
+    koma: G.match?.koma ? [...G.match.koma] : [],
+    kashi: G.match?.kashi ? [...G.match.kashi] : [],
+    direction: G.match?.direction ? [...G.match.direction] : [],
+    kitsuneCount: G.match?.kitsuneCount ?? 0,
+    lastKitsuneResult: G.match?.lastKitsuneResult ?? null,
     winner: G.match?.winner ?? -1,
     resultReason: G.match?.resultReason ?? null,
     pendingChoice: G.match?.pendingChoice ? { ...G.match.pendingChoice } : null,
@@ -2160,7 +2451,9 @@ window.__ESR__ = {
     G.phase = 'ROLL';
     G.aiTimer = 0;
     audio.setBgmBoard(BOARDS[i].id);
-    if (tabletop && tabletop.builtBoardIdx !== i) tabletop.buildBoard(i);
+    if (tabletop && (tabletop.builtBoardIdx !== i || tabletop.builtNodeCount !== BOARDS[i].nodes.length)) {
+      tabletop.buildBoard(i);
+    }
     statusForTurn();
     syncHudDOM();
     return snapshot();
@@ -2254,6 +2547,48 @@ window.__ESR__ = {
     saveProfile();
     syncHudDOM();
     return snapshot();
+  },
+  setRuleMode(mode) {
+    if (['historical', 'kitsune', 'legacy'].includes(mode)) {
+      G.ruleMode = mode;
+      resetMatchState();
+      invalidateScene();
+      statusForTurn();
+      syncHudDOM();
+    }
+    return snapshot();
+  },
+  setPlayerCount(count) {
+    const n = Math.max(2, Math.min(4, Number(count) || 2));
+    G.playerCount = n;
+    resetMatchState();
+    invalidateScene();
+    statusForTurn();
+    syncHudDOM();
+    return snapshot();
+  },
+  setTokaidoScale(scaleMode) {
+    const mode = scaleMode === 'full53' ? 'full53' : 'compact';
+    G.tokaidoScale = mode;
+    setTokaidoRouteScale(mode);
+    if (G.boardIdx === 0) {
+      resetMatchState();
+      invalidateScene();
+      if (tabletop) tabletop.buildBoard(0);
+      statusForTurn();
+      syncHudDOM();
+    }
+    return snapshot();
+  },
+  verifyReachability() {
+    return BOARDS.map(b => EsugorokuCore.verifyBoardReachability(b, G.match?.ruleMode || G.ruleMode || 'historical'));
+  },
+  runHistoricalSim(gamesPerBoard = 250) {
+    return EsugorokuCore.runHistoricalSimulation(BOARDS, {
+      gamesPerBoard,
+      ruleMode: G.match?.ruleMode || G.ruleMode || 'historical',
+      playerCount: G.match?.playerCount || G.playerCount || 2,
+    });
   },
   settleDiceNow() {
     const d = G.physDice[0];

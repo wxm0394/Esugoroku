@@ -6,9 +6,11 @@ import assert from 'node:assert/strict';
 import {
   BOARDS, UKIYOE_CARDS, CHARMS, CHARM_BY_ID, ACHIEVEMENTS,
   MAX_EQUIPPED_CHARMS, sanitizeCharmLoadout, createMatch, getBoard,
+  setTokaidoRouteScale, TOKAIDO_53_FULL_NODES, TOKAIDO_COMPACT_NODES,
+  HISTORICAL_KOMA, KITSUNE_KEN_HANDS, resolveNodeRef,
 } from '../mobile/js/boards.js';
 import {
-  EsugorokuCore, ESR_CHARM, createSeededRng, rollDie,
+  EsugorokuCore, ESR_CHARM, ESR_MOVEMENT_MODE, createSeededRng, rollDie,
   computeDieTargetEulerYXZ, evaluateDieTopFaceYXZ,
 } from '../mobile/js/core.js';
 import { migrateProfileData, evaluateMatchProgression, G } from '../mobile/js/state.js';
@@ -39,6 +41,7 @@ function stateFor(boardIndex, options = {}) {
   return createMatch(boardIndex, {
     humanSide: 0,
     charms: [],
+    ruleMode: 'legacy',
     ...options,
   });
 }
@@ -976,6 +979,298 @@ test('runAiBatchSimulation completes deterministically across all 4 volumes and 
     simA.summaryByDifficulty.master.specialTriggers > simA.summaryByDifficulty.easy.specialTriggers,
     'Master AI actively triggers more tactical choices/charms/strikes than Easy AI',
   );
+});
+
+group('Edo–Meiji Historical E-Sugoroku Redesign (V2.0): Structured Board & Node Schema');
+test('all 4 volumes define explicit movementMode, startNodeId, goalNodeId, goalRule, allowSharedSquare, and historicalSource', () => {
+  const expectedModes = ['mawari', 'tobi', 'tobi-mawari', 'tobi-mawari'];
+  for (let i = 0; i < 4; i++) {
+    const b = getBoard(i);
+    assert.equal(b.movementMode, expectedModes[i], `Board ${b.id} movementMode`);
+    assert.equal(typeof b.startNodeId, 'string');
+    assert.equal(typeof b.goalNodeId, 'string');
+    assert.ok(b.goalRule && ['exact-bounce', 'reach'].includes(b.goalRule.type));
+    assert.equal(b.allowSharedSquare, true);
+    assert.ok(typeof b.historicalSource === 'string' && b.historicalSource.length > 0);
+    for (const n of b.nodes) {
+      assert.equal(typeof n.slugId, 'string', `missing slugId on ${b.id}#${n.id}`);
+      assert.equal(typeof n.illustration, 'string', `missing illustration on ${b.id}#${n.id}`);
+      assert.equal(typeof n.caption, 'string', `missing caption on ${b.id}#${n.id}`);
+      assert.ok(
+        ['museum-verified', 'historical-adaptation'].includes(n.sourceNote),
+        `invalid sourceNote ${n.sourceNote} on ${b.id}#${n.id}`,
+      );
+    }
+  }
+});
+
+test('createMatch defaults to ruleMode="historical", supports 2-4 players, assigns cosmetic koma, and disables combat/buffs', () => {
+  const m2 = createMatch(0);
+  assert.equal(m2.ruleMode, 'historical');
+  assert.equal(m2.playerCount, 2);
+  assert.equal(m2.pos.length, 2);
+  assert.equal(m2.koma.length, 2);
+  assert.equal(m2.customBuff, null, 'Historical mode does not apply competitive custom card buff');
+
+  const m4 = createMatch(0, { playerCount: 4 });
+  assert.equal(m4.playerCount, 4);
+  assert.equal(m4.pos.length, 4);
+  assert.equal(m4.skip.length, 4);
+  assert.equal(m4.koma.length, 4);
+  assert.deepEqual(m4.koma, ['traveler', 'fox', 'warrior', 'princess']);
+
+  // Tactical strike and charm activation are rejected in historical mode
+  const strikeAttempt = EsugorokuCore.applyTacticalStrike(getBoard(0), m2, 0);
+  assert.equal(strikeAttempt.ok, false);
+  assert.equal(strikeAttempt.reason, 'disabled_in_historical_mode');
+
+  const charmAttempt = EsugorokuCore.applyCharm(getBoard(0), m2, 'wind', { player: 0 });
+  assert.equal(charmAttempt.ok, false);
+  assert.equal(charmAttempt.reason, 'disabled_in_historical_mode');
+});
+
+group('Historical Volume 1: 東海道五十三次道中双六 (Mawari / 道中双六)');
+test('Tokaido mawari mode executes single-step landingInstruction (rest, returnTo, moveTo) and exact-bounce goal rule', () => {
+  setTokaidoRouteScale('compact');
+  const board = getBoard(0);
+  assert.equal(board.movementMode, ESR_MOVEMENT_MODE.MAWARI);
+  assert.equal(board.goalRule.type, 'exact-bounce');
+
+  // 1) Landing on #4 (鶴見泊 / rest 1 turn) sets skip[0] = 1 via landingInstruction
+  let m = createMatch(0);
+  m.pos[0] = 3;
+  let res = applyNext(board, m, 1);
+  assert.equal(res.state.pos[0], 4);
+  assert.equal(res.state.skip[0], 1);
+  assert.ok(findEvent(res.events, 'landing_instruction'));
+
+  // 2) Landing on #14 (箱根関所 -> returnTo 'odawara' #13) executes once and does not chain
+  m = createMatch(0);
+  m.pos[0] = 13;
+  res = applyNext(board, m, 1);
+  assert.equal(res.state.pos[0], 13, 'Hakone checkpoint (#14) returns to Odawara (#13)');
+  assert.ok(findEvent(res.events, 'landing_instruction'));
+
+  // 3) Landing on #20 (四日市・宮の渡し -> moveTo 'seki' #22) advances once without chaining #22's returnTo
+  m = createMatch(0);
+  m.pos[0] = 19;
+  res = applyNext(board, m, 1);
+  assert.equal(res.state.pos[0], 22, 'Landing instruction executes at most once per turn without recursive chaining');
+
+  // 4) Exact roll reaches Kyoto (#24), overshoot bounces back
+  m = createMatch(0);
+  m.pos[0] = 22;
+  const over = applyNext(board, m, 5);
+  assert.equal(over.won, false);
+  assert.equal(over.state.pos[0], 21);
+  assert.ok(findEvent(over.events, 'bounce'));
+
+  const exact = applyNext(board, m, 2);
+  assert.equal(exact.won, true);
+  assert.equal(exact.state.winner, 0);
+});
+
+test('Tokaido supports switching between 25-node compact spiral and complete 55-node 53-station route (日本橋 + 53宿 + 京・三条大橋)', () => {
+  const fullBoard = setTokaidoRouteScale('full53');
+  const board = getBoard(0);
+  assert.equal(fullBoard.nodes.length, 55);
+  assert.equal(board.nodes.length, 55);
+  assert.equal(board.goal, 54);
+  assert.equal(board.nodes[0].slugId, 'nihonbashi');
+  assert.equal(board.nodes[1].slugId, 'shinagawa');
+  assert.equal(board.nodes[10].slugId, 'hakone');
+  assert.equal(board.nodes[43].slugId, 'yokkaichi');
+  assert.equal(board.nodes[53].slugId, 'otsu');
+  assert.equal(board.nodes[54].slugId, 'kyoto_sanjo_gosho');
+
+  // Hakone (#10) returns to Odawara (#9); Yokkaichi (#43) advances to Seki (#47)
+  let m = createMatch(0);
+  m.pos[0] = 9;
+  let rHakone = applyNext(board, m, 1);
+  assert.equal(rHakone.state.pos[0], 9, 'Hakone (#10) returns to Odawara (#9)');
+
+  m = createMatch(0);
+  m.pos[0] = 42;
+  let rYokkaichi = applyNext(board, m, 1);
+  assert.equal(rYokkaichi.state.pos[0], 47, 'Yokkaichi (#43) advances to Seki (#47)');
+
+  // Restore compact scale for subsequent tests
+  setTokaidoRouteScale('compact');
+  assert.equal(getBoard(0).nodes.length, 25);
+  assert.equal(getBoard(0).goal, 24);
+});
+
+group('Historical Volume 2: 百種怪談妖物双六 (Tobi / 飛び双六)');
+test('Yokai starts at #0 百物語, finishes at #24 古御所の妖猫, and jumps directly via dieDestinations[roll]', () => {
+  const board = getBoard(1);
+  assert.equal(board.movementMode, ESR_MOVEMENT_MODE.TOBI);
+  assert.equal(board.startNodeId, 'hyakumonogatari_start');
+  assert.equal(board.goalNodeId, 'bakeneko_gosho');
+  assert.ok(board.nodes[0].title.includes('百物語'));
+  assert.ok(board.nodes[24].title.includes('古御所の妖猫'));
+
+  // At start #0 (百物語): dieDestinations = { 1: 3, 2: null, 3: 4, 4: 1, 5: null, 6: 2 }
+  // Rolling 2 has null destination -> pawn stays at #0 and emits tobi_stay event
+  let m = createMatch(1);
+  const rStay = applyNext(board, m, 2);
+  assert.equal(rStay.state.pos[0], 0, 'Rolling a null dieDestination in Tobi-sugoroku keeps pawn on current square');
+  assert.equal(rStay.state.turn, 1, 'Turn passes to next player after null stay');
+  assert.ok(findEvent(rStay.events, 'tobi_stay'));
+
+  // Rolling 3 at #0 jumps directly to #4 (文福茶釜)
+  m = createMatch(1);
+  const rJump = applyNext(board, m, 3);
+  assert.equal(rJump.state.pos[0], 4);
+
+  // At #19 (絡新婦): rolling 6 jumps directly to #24 (古御所の妖猫・上り) and wins
+  m = createMatch(1);
+  m.pos[0] = 19;
+  const rWin = applyNext(board, m, 6);
+  assert.equal(rWin.won, true);
+  assert.equal(rWin.state.pos[0], 24);
+  assert.equal(rWin.state.winner, 0);
+});
+
+group('Historical Volume 3: 英勇揃伊呂波双六 (Tobi-Mawari / いろは引キ)');
+test('Kesshu uses iroha kana index, executes kana landing transitions, requires 0 tokens, and allows peaceful same-square sharing', () => {
+  const board = getBoard(2);
+  assert.equal(board.movementMode, ESR_MOVEMENT_MODE.TOBI_MAWARI);
+  assert.equal(board.historicalRequiredTokens, 0);
+  assert.equal(board.nodes[0].iroha, 'い');
+  assert.equal(board.nodes[23].seal, '上');
+
+  // Landing on #5 (へ：平教経・赤糸威大鎧, へ -> ち #7 鎮西八郎・名刀太刀) jumps to #7 via kana-indexed landingInstruction
+  let m = createMatch(2);
+  m.pos[0] = 4;
+  const rKana = applyNext(board, m, 1);
+  assert.equal(rKana.state.pos[0], 7);
+  assert.ok(findEvent(rKana.events, 'landing_instruction'));
+
+  // Peaceful same-square sharing: Player 0 lands on Player 1's square (#2) -> no duel, no knockback, no steal
+  m = createMatch(2);
+  m.pos[0] = 1;
+  m.pos[1] = 2;
+  const rShare = applyNext(board, m, 1);
+  assert.equal(rShare.state.pos[0], 2);
+  assert.equal(rShare.state.pos[1], 2, 'Opponent is NOT knocked back when sharing a square in historical mode');
+  assert.equal(findEvent(rShare.events, 'duel'), undefined);
+
+  // Reaching #23 wins immediately without needing regalia tokens
+  m = createMatch(2);
+  m.pos[0] = 22;
+  m.tokens[0] = 0;
+  const rGoal = applyNext(board, m, 1);
+  assert.equal(rGoal.won, true);
+  assert.equal(rGoal.state.winner, 0);
+});
+
+group('Historical Volume 4: 源氏物語五十四帖・絵合双六 (Tobi-Mawari / 王朝巻物)');
+test('Genji follows chapter transitions and Sekiya branch without good/evil score or grudge penalties', () => {
+  const board = getBoard(3);
+  assert.equal(board.movementMode, ESR_MOVEMENT_MODE.TOBI_MAWARI);
+  assert.equal(board.nodes[0].title, '桐壺');
+  assert.ok(board.nodes[26].title.includes('源氏絵合'));
+
+  // Landing on #4 (若紫) jumps to #6 (紅葉賀) via landingInstruction
+  let m = createMatch(3);
+  m.pos[0] = 3;
+  const rWakamurasaki = applyNext(board, m, 1);
+  assert.equal(rWakamurasaki.state.pos[0], 6);
+  assert.equal(rWakamurasaki.state.boardState.genji.balance[0], 0, 'No moral balance score in historical mode');
+  assert.equal(rWakamurasaki.state.boardState.genji.grudgeMarks[0], 0, 'No grudge marks in historical mode');
+
+  // Reaching #15 (関屋) branches into Rokujoin / Uji routes and allows interactive route choice
+  m = createMatch(3);
+  m.pos[0] = 14;
+  const paused = applyNext(board, m, 2, { pauseOnChoice: true });
+  assert.equal(paused.state.pendingChoice?.type, 'genji_branch');
+  const chosen = EsugorokuCore.applyChoice(board, paused.state, { type: 'genji_branch', route: 'good' });
+  assert.equal(chosen.ok, true);
+  assert.equal(chosen.state.pos[0], 18); // #16 絵合 -> landingInstruction moveTo #18 薄雲
+});
+
+group('Multi-Player Turn Rotation (2–4 Players) & Special Mode: 『しん工夫けん双六』（狐拳名所双六）');
+test('4-player match rotates turns 0 -> 1 -> 2 -> 3 -> 0 and respects individual rest (休) counters', () => {
+  const board = getBoard(0);
+  let m = createMatch(0, { playerCount: 4 });
+  assert.equal(m.turn, 0);
+
+  m = applyNext(board, m, 2).state; // P0 moves, next is P1
+  assert.equal(m.turn, 1);
+  m = applyNext(board, m, 2).state; // P1 moves, next is P2
+  assert.equal(m.turn, 2);
+  m = applyNext(board, m, 2).state; // P2 moves, next is P3
+  assert.equal(m.turn, 3);
+  m = applyNext(board, m, 2).state; // P3 moves, wraps back to P0
+  assert.equal(m.turn, 0);
+});
+
+test('Kitsune-ken special mode (ruleMode="kitsune") supports bidirectional movement and Fox-Shoya-Hunter bouts with kashi tokens', () => {
+  const board = getBoard(0);
+  let m = createMatch(0, { ruleMode: 'kitsune', playerCount: 2 });
+  assert.equal(m.ruleMode, 'kitsune');
+  assert.deepEqual(m.kashi, [5, 5]);
+  assert.deepEqual(m.direction, [1, -1]);
+
+  // Toggle direction to reverse (-1) from #5 and roll 2 -> moves backward to #3
+  m.pos[0] = 5;
+  m.pos[1] = 10;
+  const rev = applyNext(board, m, 2, { direction: -1 });
+  assert.equal(rev.state.direction[0], -1);
+  assert.equal(rev.state.pos[0], 3);
+
+  // Meeting on the same square triggers Kitsune-ken bout (fox beats shoya):
+  // Loser transfers 1 kashi token to winner, and both pawns remain peacefully on the square
+  m = createMatch(0, { ruleMode: 'kitsune', playerCount: 2 });
+  m.pos[0] = 1;
+  m.pos[1] = 3;
+  const meet = applyNext(board, m, 2, { kitsuneHand: 'fox', opponentKitsuneHand: 'shoya' });
+  assert.equal(meet.state.pos[0], 3);
+  assert.equal(meet.state.pos[1], 3, 'Kitsune-ken does not knock back opponent pawn');
+  assert.equal(meet.state.kashi[0], 6, 'Winner gains +1 kashi sweet token');
+  assert.equal(meet.state.kashi[1], 4, 'Loser hands over 1 kashi sweet token');
+  assert.equal(meet.state.kitsuneCount, 1);
+  const kEv = findEvent(meet.events, 'kitsune_ken');
+  assert.ok(kEv);
+  assert.equal(kEv.winner, 0);
+});
+
+group('Automated Graph Reachability & 1,000-Match Multi-Volume Simulation');
+test('verifyBoardReachability confirms 100% of nodes can reach Goal (上り) with zero dead-end cycles on all 4 boards + 55-node Tokaido', () => {
+  for (const board of BOARDS) {
+    const rep = EsugorokuCore.verifyBoardReachability(board, 'historical');
+    assert.equal(rep.ok, true, `${board.id} reachability failed: deadEnds=${JSON.stringify(rep.deadEnds)}`);
+    assert.equal(rep.reachableFromStart, board.nodes.length);
+    assert.equal(rep.canReachGoalCount, board.nodes.length);
+    assert.equal(rep.deadEnds.length, 0);
+  }
+
+  // Also verify 55-node complete Tokaido 53-station route
+  setTokaidoRouteScale('full53');
+  const fullRep = EsugorokuCore.verifyBoardReachability(getBoard(0), 'historical');
+  assert.equal(fullRep.ok, true);
+  assert.equal(fullRep.nodeCount, 55);
+  setTokaidoRouteScale('compact');
+});
+
+test('runHistoricalSimulation runs 1,000 automated matches (250 per volume) with 100% completion and zero infinite loops', () => {
+  const sim = EsugorokuCore.runHistoricalSimulation(BOARDS, {
+    gamesPerBoard: 250,
+    ruleMode: 'historical',
+    playerCount: 2,
+    maxPly: 220,
+    baseSeed: 0x18570101,
+  });
+  assert.equal(sim.totalGames, 1000);
+  assert.equal(sim.totalCompleted, 1000);
+  assert.equal(sim.completionRate, 1, `Expected 100% completion rate across 1,000 matches, got ${sim.completionRate}`);
+
+  for (const board of BOARDS) {
+    const bReport = sim.byBoard[board.id];
+    assert.equal(bReport.games, 250);
+    assert.equal(bReport.completionRate, 1);
+    assert.ok(bReport.avgPly >= 4 && bReport.avgPly <= 140, `${board.id} avgPly=${bReport.avgPly}`);
+  }
 });
 
 console.log(`\n${passed} tests passed, ${failures.length} failed.`);

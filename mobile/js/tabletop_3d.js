@@ -955,10 +955,15 @@ export class Tabletop3D {
 
   setupPawns() {
     this.pawns = [
-      this.createKokeshiPawn(0, '#c83223', '#f5cb5c', 'あなた・旅'),
-      this.createKokeshiPawn(1, '#1d5478', '#d9e6f2', '相手・伴'),
+      this.createKokeshiPawn(0, '#c83223', '#f5cb5c', '旅人・壱'),
+      this.createKokeshiPawn(1, '#1d5478', '#d9e6f2', '白狐・弐'),
+      this.createKokeshiPawn(2, '#2e6f40', '#e9f5d8', '武者・参'),
+      this.createKokeshiPawn(3, '#8a3ab9', '#f3e1fa', '姫・肆'),
     ];
-    this.pawns.forEach(p => this.scene.add(p));
+    this.pawns.forEach((p, idx) => {
+      p.visible = idx < 2;
+      this.scene.add(p);
+    });
 
     // Active Turn Woodblock Seal Spotlight Halo Ring beneath the active player's 3D Kokeshi pawn
     const haloGroup = new THREE.Group();
@@ -2027,6 +2032,7 @@ export class Tabletop3D {
   buildBoard(boardIndex) {
     this.builtBoardIdx = boardIndex;
     const board = BOARDS[boardIndex];
+    this.builtBoardNodeCount = board.nodes.length;
 
     // Dispose old board meshes & textures cleanly
     while (this.boardGroup.children.length > 0) {
@@ -2198,13 +2204,15 @@ export class Tabletop3D {
       });
     }
 
-    // Immediately snap pawns to current board positions so switching volumes doesn't glide from previous start
-    if (this.pawns && this.pawns.length === 2) {
-      for (let side = 0; side < 2; side++) {
+    // Immediately snap all 4 pawns to current board positions so switching volumes or player counts doesn't glide from origin
+    if (this.pawns && this.pawns.length > 0) {
+      const offsetsX = [-0.62, 0.62, -0.34, 0.34];
+      const offsetsZ = [0.28, -0.28, -0.44, 0.44];
+      for (let side = 0; side < this.pawns.length; side++) {
         const nodeIdx = G.match ? (G.match.pos[side] ?? board.start) : board.start;
         const c = nodeWorldCenter(board.nodes[nodeIdx] || board.nodes[0]);
-        const sideOffsetX = side === 0 ? -0.62 : 0.62;
-        const sideOffsetZ = side === 0 ? 0.28 : -0.28;
+        const sideOffsetX = offsetsX[side % 4];
+        const sideOffsetZ = offsetsZ[side % 4];
         this.pawns[side].position.set(c.x + sideOffsetX, c.y + 0.08, c.z + sideOffsetZ);
       }
     }
@@ -2331,11 +2339,10 @@ export class Tabletop3D {
   }
 
   update(dt, elapsed) {
-    if (this.builtBoardIdx !== G.boardIdx) {
+    const board = currentBoard();
+    if (this.builtBoardIdx !== G.boardIdx || this.builtBoardNodeCount !== board.nodes.length) {
       this.buildBoard(G.boardIdx);
     }
-
-    const board = currentBoard();
 
     // Smooth camera preset transition
     if (this.presetTransition) {
@@ -2369,7 +2376,7 @@ export class Tabletop3D {
       const tg = this.tileMeshes[i];
       if (!tg) continue;
       const isHovered = G.hoverNode === i;
-      const isOccupied = G.match && (G.match.pos[0] === i || G.match.pos[1] === i);
+      const isOccupied = G.match && G.match.pos.some((p, s) => s < (G.match.playerCount || 2) && p === i);
       let waveLift = 0;
       let waveRollZ = 0;
       if (waveActive) {
@@ -2407,11 +2414,24 @@ export class Tabletop3D {
 
     // Update 3D pawns (with step-by-step parabolic hopping during G.phase === 'MOVE')
     if (G.match) {
-      for (let side = 0; side < 2; side++) {
+      const pCount = Math.max(2, Math.min(4, G.match.playerCount || G.playerCount || 2));
+      const offsetsX = [-0.62, 0.62, -0.34, 0.34];
+      const offsetsZ = [0.28, -0.28, -0.44, 0.44];
+      for (let side = 0; side < this.pawns.length; side++) {
         const pawn = this.pawns[side];
+        if (!pawn) continue;
+        const wasVisible = pawn.visible;
+        pawn.visible = side < pCount;
         const bodyGroup = pawn.userData.bodyGroup;
-        const sideOffsetX = side === 0 ? -0.62 : 0.62;
-        const sideOffsetZ = side === 0 ? 0.28 : -0.28;
+        const sideOffsetX = offsetsX[side % 4];
+        const sideOffsetZ = offsetsZ[side % 4];
+
+        if (!pawn.visible) {
+          const nodeIdx = G.match.pos[side] ?? 0;
+          const c = nodeWorldCenter(board.nodes[nodeIdx] || board.nodes[0]);
+          pawn.position.set(c.x + sideOffsetX, c.y + 0.08, c.z + sideOffsetZ);
+          continue;
+        }
 
         if (G.phase === 'MOVE' && G.pieceAnim && G.pieceAnim.side === side && G.pieceAnim.indexes?.length > 1) {
           const anim = G.pieceAnim;
@@ -2430,11 +2450,9 @@ export class Tabletop3D {
           const wz = THREE.MathUtils.lerp(cFrom.z, cTo.z, localT) + sideOffsetZ;
           const baseH = THREE.MathUtils.lerp(cFrom.y, cTo.y, localT);
 
-          // High parabolic hop arc + squash & stretch
           const hopArc = Math.sin(localT * Math.PI) * 1.65;
           pawn.position.set(wx, baseH + hopArc, wz);
 
-          // Forward pitch during hop
           const pitch = Math.sin(localT * Math.PI * 2) * 0.24;
           bodyGroup.rotation.x = pitch;
           const squash = localT < 0.15 || localT > 0.85 ? 0.90 : 1.08;
@@ -2443,9 +2461,12 @@ export class Tabletop3D {
           const nodeIdx = G.match.pos[side] ?? 0;
           const c = nodeWorldCenter(board.nodes[nodeIdx] || board.nodes[0]);
           _targetPos.set(c.x + sideOffsetX, c.y + 0.08, c.z + sideOffsetZ);
-          pawn.position.lerp(_targetPos, 1 - Math.exp(-14 * dt));
+          if (!wasVisible || pawn.position.distanceTo(_targetPos) > 10) {
+            pawn.position.copy(_targetPos);
+          } else {
+            pawn.position.lerp(_targetPos, 1 - Math.exp(-14 * dt));
+          }
           bodyGroup.rotation.x = THREE.MathUtils.damp(bodyGroup.rotation.x, 0, 10, dt);
-          // Subtle idle breathing bob on active turn
           const isTurn = G.match.turn === side && G.phase === 'ROLL';
           const bob = isTurn ? Math.abs(Math.sin(elapsed * 4.2)) * 0.18 : 0;
           pawn.position.y = c.y + 0.08 + bob;

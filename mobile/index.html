@@ -53,8 +53,19 @@
         </nav>
 
         <div class="topbar-actions">
+          <select id="select-rule-mode" class="action-btn secondary" title="絵双六の規則モード切替: 江戸・明治の歴史絵双六 / 安政四年『しん工夫けん双六』狐拳特別盤 / 旧版戦術拡張" aria-label="規則モード切替">
+            <option value="historical" selected>📜 歴史絵双六</option>
+            <option value="kitsune">🦊 狐拳特別盤</option>
+            <option value="legacy">⚔️ 旧版戦術</option>
+          </select>
+          <select id="select-player-count" class="action-btn secondary" title="対局人数切替（2人〜4人・同格共存）" aria-label="対局人数切替">
+            <option value="2" selected>👥 2人</option>
+            <option value="3">👥 3人</option>
+            <option value="4">👥 4人</option>
+          </select>
+          <button type="button" id="btn-tokaido-scale" class="action-btn secondary" title="東海道五十三次の盤面規模を「25格道中略式」と「全55格（五十三宿完本）」で切替">🗾 東海道: 25格</button>
           <button type="button" id="btn-ukiyoe-filter" class="action-btn ukiyoe-filter-btn" data-mode="nishikie" title="浮世絵木版画シェーダー切替: 墨線輪郭検出＋奉書紙肌理オーバーレイ (Uキー)">🖌️ 版画: 錦絵摺</button>
-          <button type="button" id="btn-tutorial" class="action-btn secondary">📖 新手引導</button>
+          <button type="button" id="btn-tutorial" class="action-btn secondary">📖 遊び方</button>
           <button type="button" id="btn-gallery" class="action-btn secondary">🖼️ 錦絵図鑑</button>
           <button type="button" id="btn-bgm" class="action-btn secondary bgm-toggle-btn" data-bgm="on" aria-pressed="true" title="三味線・箏の和楽器BGM（雅楽）を効果音とは独立して開閉切替 (Mキー)">🪕 絃楽: 開</button>
           <button type="button" id="btn-audio" class="action-btn secondary sfx-toggle-btn" data-sfx="on" aria-pressed="true" title="骨骰・檜木駒の効果音（SFX）をBGMとは独立して開閉切替">🔊 効果音: 開</button>
@@ -103,28 +114,42 @@
         <!-- Zone 1: Players & Board Progress -->
         <div class="dock-section dock-players">
           <div class="dock-section-header">
-            <span id="dock-volume-title">巻ノ壱・東海道五十三次（全25格）</span>
+            <span id="dock-volume-title">巻ノ壱・東海道五十三次道中双六（全25格）</span>
             <span class="dock-meta-sep">·</span>
-            <span id="dock-rule-tag">二重廻り・追突攻防双六</span>
+            <span id="dock-rule-tag">廻り双六（道中双六）</span>
           </div>
           <div class="player-rows">
             <div class="player-row active" id="player-row-0">
-              <span class="pawn-swatch human">旅</span>
+              <span class="pawn-swatch human" id="pawn-swatch-0">旅</span>
               <div class="player-info">
-                <div class="player-name">あなた（旅人） <span class="turn-tag" id="turn-tag-0">手番中</span></div>
+                <div class="player-name"><span id="player-label-0">あなた（旅人）</span> <span class="turn-tag" id="turn-tag-0">手番中</span></div>
                 <div class="player-pos" id="player-pos-0">現在地: #0 日本橋</div>
               </div>
             </div>
             <div class="player-row" id="player-row-1">
-              <span class="pawn-swatch ai">伴</span>
+              <span class="pawn-swatch ai" id="pawn-swatch-1">狐</span>
               <div class="player-info">
-                <div class="player-name">同行者（相手） <span class="turn-tag hidden" id="turn-tag-1">思考中</span></div>
+                <div class="player-name"><span id="player-label-1">同行者・弐（白狐）</span> <span class="turn-tag hidden" id="turn-tag-1">待機</span></div>
                 <div class="player-pos" id="player-pos-1">現在地: #0 日本橋</div>
+              </div>
+            </div>
+            <div class="player-row hidden" id="player-row-2">
+              <span class="pawn-swatch ai" id="pawn-swatch-2" style="background:#2e6f40;color:#f4f9ec;">武</span>
+              <div class="player-info">
+                <div class="player-name"><span id="player-label-2">同行者・参（武者）</span> <span class="turn-tag hidden" id="turn-tag-2">待機</span></div>
+                <div class="player-pos" id="player-pos-2">現在地: #0 日本橋</div>
+              </div>
+            </div>
+            <div class="player-row hidden" id="player-row-3">
+              <span class="pawn-swatch ai" id="pawn-swatch-3" style="background:#8a3ab9;color:#fbf0ff;">姫</span>
+              <div class="player-info">
+                <div class="player-name"><span id="player-label-3">同行者・肆（姫）</span> <span class="turn-tag hidden" id="turn-tag-3">待機</span></div>
+                <div class="player-pos" id="player-pos-3">現在地: #0 日本橋</div>
               </div>
             </div>
           </div>
           <div class="board-special-meter" id="board-special-meter">
-            🍱 名物: 0/3 · ⚔️ 追突弾き: 0回 · 上りまで残り 24格
+            📜 廻り双六 · 同格共存 · 振出から上りまで全25格
           </div>
         </div>
 
@@ -259,17 +284,17 @@
       <div class="modal-panel lobby-panel">
         <div class="modal-header">
           <div>
-            <h1 class="modal-title">江戸浮世絵・立体絵双六 ─ 画帖選択（V1.3 戦術攻防版）</h1>
-            <p class="modal-subtitle">公平六面骰・全12種の懐中護符（3種編成）・四巻固有の戦術選択・主将錦絵Buff・4段階AI難度を搭載。</p>
+            <h1 class="modal-title">江戸—明治・絵双六画帖 ─ 歴史復原＆立体木版双六</h1>
+            <p class="modal-subtitle">廻り双六・飛び双六・飛び廻り双六の三様式と、安政四年『しん工夫けん双六』（狐拳名所双六）を考証実装。</p>
           </div>
           <button type="button" id="btn-lobby-close" class="modal-close-btn">✕ 盤面へ戻る</button>
         </div>
 
         <div class="lobby-hand-bar" id="lobby-hand-bar">
           <div class="lobby-hand-info">
-            <span class="lobby-hand-tag">🃏 主将錦絵＆護符3種＆対局設定</span>
-            <strong id="lobby-hand-card-name">日本橋朝市（先駆出立の加護）</strong>
-            <span id="lobby-hand-card-desc">開幕+2格前進・初手出目+1歩</span>
+            <span class="lobby-hand-tag">📜 絵双六の規則・人数・図鑑鑑賞設定</span>
+            <strong id="lobby-hand-card-name">歴史絵双六モード（廻り・飛び・飛び廻り）</strong>
+            <span id="lobby-hand-card-desc">1個の六面骰と盤面の絵・指示文に従って「上り」を競う正統な紙面絵双六</span>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <select id="select-ai-difficulty" class="action-btn secondary" aria-label="相手の難易度と対局モード">
@@ -277,10 +302,10 @@
               <option value="normal" selected>AI難度: 普通</option>
               <option value="hard">AI難度: 困難</option>
               <option value="master">AI難度: 大師</option>
-              <option value="local2p">同機二人対戦</option>
+              <option value="local2p">同機対戦</option>
             </select>
-            <button type="button" id="btn-lobby-charms" class="action-btn secondary">🧿 護符編成 (3/12)</button>
-            <button type="button" id="btn-lobby-change-hand" class="action-btn secondary">🖼️ 主将錦絵を変更</button>
+            <button type="button" id="btn-lobby-charms" class="action-btn secondary">🧿 守札図鑑 (12種)</button>
+            <button type="button" id="btn-lobby-change-hand" class="action-btn secondary">🖼️ 錦絵手札鑑賞</button>
           </div>
         </div>
 
@@ -289,11 +314,11 @@
             <div class="volume-card-banner">
               <img src="/assets/aistudio/v2-de9b2227c1ae60d2ad93091f2c368ba2_r_33d70672.jpg" alt="大日本神社・東海道名所雙六 古版画" loading="lazy">
             </div>
-            <div class="volume-card-badge">巻ノ壱 · 二重渦巻回廊（全25格）</div>
-            <h2 class="volume-card-title">東海道・御府内名物道中双六</h2>
-            <p class="volume-card-rule"><strong>名物蒐集＋旅銭戦術</strong>：三名物で前進跳び＆旅銭を獲得。旅銭を払えば「泊」休みや関所戻りを帳消し可能！</p>
+            <div class="volume-card-badge">巻ノ壱 · 廻り双六（道中双六 · 25格 / 53次完本）</div>
+            <h2 class="volume-card-title">東海道五十三次道中双六</h2>
+            <p class="volume-card-rule"><strong>三重県総合博物館蔵『東海道五十三駅道中記細見雙六』考証</strong>：日本橋振出から京都三条大橋・御所上りへ。川止め一休・箱根関所手形戻り・四日市から関へ進む道中指示を体験！</p>
             <div class="volume-card-footer">
-              <span>全25格 · 広重・貞秀風名所錦絵</span>
+              <span>廻り双六 · 宿場距離・名物・渡河賃記載</span>
               <button type="button" class="volume-play-btn" data-play-board="0">この画帖で遊ぶ →</button>
             </div>
           </article>
@@ -302,11 +327,11 @@
             <div class="volume-card-banner">
               <img src="/assets/aistudio/v2-be2eef69ff02fff49f3a362045aa1bb0_r_5a6413a7.jpg" alt="江戸飛び双六・百物語古版画" loading="lazy">
             </div>
-            <div class="volume-card-badge">巻ノ弐 · 百物語大迷宮（全25格）</div>
-            <h2 class="volume-card-title">百物語・妖怪変化飛び双六</h2>
-            <p class="volume-card-rule"><strong>四箇所の青行灯＋百鬼夜行</strong>：#4・#10・#16・#22の青行灯を四つ灯すと、次回正向怪異ジャンプが2倍（青行灯守で3倍）！</p>
+            <div class="volume-card-badge">巻ノ弐 · 飛び双六（出目別行先表 · 全25格）</div>
+            <h2 class="volume-card-title">百種怪談妖物双六</h2>
+            <p class="volume-card-rule"><strong>国立歴史民俗博物館・東京学芸大学蔵『百種怪談妖物双六』考証</strong>：振出「百物語」から上り「古御所の妖猫」へ。各図格に記された出目別行先表で怪異から怪異へ飛び移り、該当なき出目はその場に留まります。</p>
             <div class="volume-card-footer">
-              <span>全25格 · 国芳・豊国風組絵</span>
+              <span>飛び双六 · 出目1〜6対応目的地</span>
               <button type="button" class="volume-play-btn" data-play-board="1">この画帖で遊ぶ →</button>
             </div>
           </article>
@@ -315,11 +340,11 @@
             <div class="volume-card-banner">
               <img src="/assets/aistudio/v2-66c8cbba45a5e5db3bbeae4d884a556c_r_a1e662dd.jpg" alt="英勇揃伊呂波雙六・源平武者絵古版画" loading="lazy">
             </div>
-            <div class="volume-card-badge">巻ノ参 · 武具奪取＆合戦（全24格）</div>
-            <h2 class="volume-card-title">太平記・英雄武将決集双六</h2>
-            <p class="volume-card-rule"><strong>三備え＋三つの合戦姿勢</strong>：兜・太刀・陣太鼓を集めて御前へ。同格遭遇時は「猛攻・牽制・固守」の戦術姿勢を選択！</p>
+            <div class="volume-card-badge">巻ノ参 · 飛び廻り双六（いろは目印 · 全24格）</div>
+            <h2 class="volume-card-title">英勇揃伊呂波双六</h2>
+            <p class="volume-card-rule"><strong>早稲田大学演劇博物館蔵・芳虎画『英勇揃伊呂波雙六』考証</strong>：源義経・楠木正成・真田幸村ら英雄を「い・ろ・は」の仮名目印で繋ぐ飛び廻り双六。戦功により指定仮名の英雄格へ躍進！</p>
             <div class="volume-card-footer">
-              <span>全24格 · 芳虎・源平武者錦絵</span>
+              <span>飛び廻り双六 · いろは仮名遷移</span>
               <button type="button" class="volume-play-btn" data-play-board="2">この画帖で遊ぶ →</button>
             </div>
           </article>
@@ -328,11 +353,11 @@
             <div class="volume-card-banner">
               <img src="/assets/aistudio/v2-2ea7f57afdf0bf62b4d0d8854269efe9_r_cfd81106.jpg" alt="源氏絵合・奥御殿御祝儀雙六古版画" loading="lazy">
             </div>
-            <div class="volume-card-badge">巻ノ肆 · 善悪二道長編（全27格）</div>
-            <h2 class="volume-card-title">源氏物語・善玉悪玉道中双六</h2>
-            <p class="volume-card-rule"><strong>善悪進路の主動選択</strong>：関屋（#15）で安定の「雅道（善）」か怨念印記を得る「修羅道（悪）」を自らの意思で選択！</p>
+            <div class="volume-card-badge">巻ノ肆 · 飛び廻り双六（源氏五十四帖 · 全27格）</div>
+            <h2 class="volume-card-title">源氏物語五十四帖・絵合双六</h2>
+            <p class="volume-card-rule"><strong>『源氏絵合・奥御殿御祝儀雙六』文学適応</strong>：桐壺から須磨・明石・宇治を経て六条院絵合の上りへ。和歌と場面の縁に従って帖から帖へと巡る王朝文学絵双六。</p>
             <div class="volume-card-footer">
-              <span>全27格 · 豊国・源氏絵合錦絵</span>
+              <span>飛び廻り双六 · 和歌・帖名場面</span>
               <button type="button" class="volume-play-btn" data-play-board="3">この画帖で遊ぶ →</button>
             </div>
           </article>
@@ -392,20 +417,20 @@
         <div class="tutorial-steps">
           <div class="tutorial-step-card">
             <div class="step-num">壱</div>
-            <h3>1. 賽（サイコロ）を振って進む</h3>
-            <p>画面右下の大きな赤いボタン<strong>「🎲 賽を振る (Space)」</strong>を押すか、3D盤面右側の<strong>磁器茶碗（賽碗）</strong>をクリックすると骨骰が転がります。人間もAIも同じ公平な1〜6の六面骰で勝負します。</p>
+            <h3>1. 振出から「上り」へ ─ 一枚の六面骰で進む</h3>
+            <p>江戸・明治の紙面絵双六と同じく、<strong>1個の六面骰（1〜6）</strong>を振り、図格の絵と詞書を読みながら<strong>「上り」</strong>へ最初に到達した人が勝ちです。同じマスに複数の駒が止まっても弾き飛ばしは起きず、穏やかに同席します。</p>
           </div>
 
           <div class="tutorial-step-card">
             <div class="step-num">弐</div>
-            <h3>2. 四巻それぞれの戦術決断</h3>
-            <p>東海道の<strong>「旅銭」</strong>、百物語の<strong>「四つの青行灯と百鬼夜行」</strong>、英勇揃の<strong>「猛攻・牽制・固守」</strong>、源氏絵合の<strong>「雅道・修羅道選択」</strong>など、局面に応じた選択が勝敗を分けます。</p>
+            <h3>2. 廻り双六・飛び双六・飛び廻り双六</h3>
+            <p>第一巻『東海道』は順路を進む<strong>廻り双六</strong>（川止め・箱根手形戻り・四日市→関）、第二巻『百種怪談』は出目別行先表で飛ぶ<strong>飛び双六</strong>（行先なき出目は留まる）、第三巻『英勇揃』・第四巻『源氏』は<strong>飛び廻り双六</strong>です。</p>
           </div>
 
           <div class="tutorial-step-card">
             <div class="step-num">参</div>
-            <h3>3. 十二種の懐中護符（3つ選択）と主将錦絵</h3>
-            <p>全12種の懐中護符から対局前に3種を編成でき、さらに蒐集した36枚の錦絵から1枚を<strong>「主将手札」</strong>として装備できます。各巻の目標を達成すると新たな錦絵が開帳されます！</p>
+            <h3>3. 特別盤『しん工夫けん双六』（狐拳名所双六）</h3>
+            <p>上部の規則切替で<strong>「🦊 狐拳特別盤」</strong>を選ぶと、安政四年（1857）歌川国郷画の史料に基づき、順回り・逆回りの双方向移動と、同格遭遇時の<strong>狐拳（狐＞庄屋＞猟師＞狐）による菓子遣り取り</strong>も楽しめます！</p>
           </div>
         </div>
 

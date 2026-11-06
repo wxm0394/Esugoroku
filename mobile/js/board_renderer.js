@@ -2027,13 +2027,23 @@ export function invalidateScene() {
   sceneCacheBoard = -1;
 }
 
+let sceneCacheNodeCount = -1;
+
 export function drawPlaying(ctx, time) {
-  if (sceneCacheBoard !== G.boardIdx || !sceneCache) {
+  const board = currentBoard();
+  if (sceneCacheBoard !== G.boardIdx || sceneCacheNodeCount !== board.nodes.length || !sceneCache) {
     sceneCache = buildSceneCache(G.boardIdx);
     sceneCacheBoard = G.boardIdx;
+    sceneCacheNodeCount = board.nodes.length;
   }
-  const board = currentBoard();
   const cam = G.camera;
+  const pCount = Math.max(2, Math.min(4, G.match?.playerCount || G.playerCount || 2));
+  const human = G.match?.humanSide ?? 0;
+  const order = [];
+  for (let s = 0; s < pCount; s++) {
+    if (s !== human) order.push(s);
+  }
+  order.push(human);
   // V2: camera zoom & follow over the board layer only.  The HUD and dice
   // tray are drawn afterwards in screen-fixed coordinates.
   if (cam && (G.phase === 'MOVE' || G.phase === 'ANIM')) {
@@ -2044,8 +2054,6 @@ export function drawPlaying(ctx, time) {
     ctx.drawImage(sceneCache, 0, 0);
     drawPreviewArcs(ctx, board);
     drawTokenBadges(ctx, board);
-    const human = G.match?.humanSide ?? 0;
-    const order = [1 - human, human];
     for (const side of order) {
       const p = animPawn(side, time);
       drawPawn(ctx, side, p.x, p.y, time);
@@ -2058,8 +2066,6 @@ export function drawPlaying(ctx, time) {
     drawRightPanelSkin(ctx, board, false);
     drawPreviewArcs(ctx, board);
     drawTokenBadges(ctx, board);
-    const human = G.match?.humanSide ?? 0;
-    const order = [1 - human, human];
     for (const side of order) {
       const p = animPawn(side, time);
       drawPawn(ctx, side, p.x, p.y, time);

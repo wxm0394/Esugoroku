@@ -397,38 +397,71 @@ export function createBoardBroadsheetCanvas(board) {
 }
 
 function getKindMeta(board, node) {
+  const inst = node.landingInstruction;
   switch (node.kind) {
     case 'start':
-      return { seal: '振出', badge: '起点', slipBg: '#c8472c', slipText: '#fff8ea', border: '#9e261b' };
+      return { seal: '振出', badge: '振り出し・起点', slipBg: '#c8472c', slipText: '#fff8ea', border: '#9e261b' };
     case 'goal':
-      return { seal: '上り', badge: '大上り', slipBg: '#dfc068', slipText: '#18110c', border: '#b8861b' };
+      return { seal: '上り', badge: '大上り・終着', slipBg: '#dfc068', slipText: '#18110c', border: '#b8861b' };
     case 'jump': {
       const d = node.jumpTable ? node.jumpTable[0] : 2;
       const sign = d >= 0 ? `+${d}` : `${d}`;
+      const badgeText = inst?.badge || (d >= 0 ? `飛進(${sign})` : `引戻(${sign})`);
       return {
-        seal: d >= 0 ? `飛${sign}` : `戻${sign}`,
-        badge: d >= 0 ? `飛${sign}格` : `関${sign}格`,
+        seal: node.iroha || (d >= 0 ? '飛' : '戻'),
+        badge: badgeText,
         slipBg: d >= 0 ? '#c8472c' : '#59253a',
         slipText: '#fff8ea',
         border: d >= 0 ? '#bf3426' : '#59253a',
       };
     }
     case 'stay':
-      return { seal: '泊', badge: '一休み', slipBg: '#9e261b', slipText: '#fff8ea', border: '#8c2016' };
+      return {
+        seal: node.iroha || '休',
+        badge: inst?.badge || '一休み',
+        slipBg: '#9e261b',
+        slipText: '#fff8ea',
+        border: '#8c2016',
+      };
     case 'branch':
-      return { seal: '岐', badge: '偶善/奇悪', slipBg: '#5c3373', slipText: '#fff8ea', border: '#5c3373' };
+      return {
+        seal: node.iroha || '岐',
+        badge: inst?.badge || '物語の岐路',
+        slipBg: '#5c3373',
+        slipText: '#fff8ea',
+        border: '#5c3373',
+      };
     case 'good':
-      return { seal: '善', badge: '善玉道', slipBg: '#dfc068', slipText: '#18110c', border: '#b8861b' };
+      return {
+        seal: '雅',
+        badge: inst?.badge || '六条院・四季帖',
+        slipBg: '#dfc068',
+        slipText: '#18110c',
+        border: '#b8861b',
+      };
     case 'evil':
-      return { seal: '悪', badge: '悪玉道', slipBg: '#4f2b5e', slipText: '#fff8ea', border: '#4f2b5e' };
+      return {
+        seal: '宇',
+        badge: inst?.badge || '須磨・宇治十帖',
+        slipBg: '#4f2b5e',
+        slipText: '#fff8ea',
+        border: '#4f2b5e',
+      };
     default: {
-      if (node.tokens) {
-        return { seal: '備', badge: `武具:${node.tokenLabel}`, slipBg: '#c8472c', slipText: '#fff8ea', border: '#b53324' };
+      if (board.movementMode === 'tobi' && node.dieDestinations) {
+        const activeFaces = [1, 2, 3, 4, 5, 6].filter(f => node.dieDestinations[f] !== null && node.dieDestinations[f] !== undefined);
+        return {
+          seal: String(node.id),
+          badge: inst?.badge || `出目飛(${activeFaces.join('・')})`,
+          slipBg: (node.id % 2) === 0 ? '#dfc068' : '#c95236',
+          slipText: (node.id % 2) === 0 ? '#18110c' : '#fff8ea',
+          border: '#2b1e14',
+        };
       }
       const isEven = (node.id % 2) === 0;
       return {
-        seal: String(node.id),
-        badge: `#${node.id}`,
+        seal: node.iroha || String(node.id),
+        badge: inst?.badge || (node.stationNo ? `五十三次・第${node.stationNo}宿` : `#${node.id}`),
         slipBg: isEven ? '#dfc068' : '#c95236',
         slipText: isEven ? '#18110c' : '#fff8ea',
         border: '#2b1e14',

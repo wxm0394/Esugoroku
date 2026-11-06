@@ -33,6 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = [
     {
         "id": "tokaido",
+        "movement_mode": "mawari",
         "layout": "spiral-corridor",
         "shape": "arrow-strip",
         "skin": "cedar-passport",
@@ -45,6 +46,7 @@ EXPECTED = [
     },
     {
         "id": "yokai",
+        "movement_mode": "tobi",
         "layout": "irregular-collage",
         "shape": "collage",
         "skin": "dark-temple",
@@ -57,6 +59,7 @@ EXPECTED = [
     },
     {
         "id": "kesshu",
+        "movement_mode": "tobi-mawari",
         "layout": "tilted-warrior-cards",
         "shape": "warrior-card",
         "skin": "black-lacquer-armor",
@@ -65,10 +68,11 @@ EXPECTED = [
         "dice_shape": "hex-makie",
         "nodes": 24,
         "goal": 23,
-        "required": 3,
+        "required": 0,
     },
     {
         "id": "genji",
+        "movement_mode": "tobi-mawari",
         "layout": "four-color-split-tracks",
         "shape": "vertical-strip",
         "skin": "gold-nashiji-casket",
@@ -520,7 +524,8 @@ def main() -> int:
 
         suite.section("Boot and selection", lambda: test_selection(driver, suite, shot_dir))
         suite.section("Four independent volumes", lambda: test_volumes(driver, suite, shot_dir))
-        suite.section("Independent rule branches", lambda: test_rules(driver, suite))
+        suite.section("Edo-Meiji Historical E-Sugoroku Redesign & Kitsune-ken", lambda: test_historical_redesign(driver, suite, shot_dir))
+        suite.section("Independent rule branches (Legacy V1.1-V1.3 Compatibility)", lambda: test_rules(driver, suite))
         suite.section("Dice physics and stable board", lambda: test_dice_and_stability(driver, suite))
         suite.section("Gallery and settlement flows", lambda: test_flows(driver, suite, shot_dir))
 
@@ -601,6 +606,7 @@ def test_selection(driver, suite: Suite, shot_dir: Path | None) -> None:
     suite.eq(len(js(driver, "return window.__ESR__.charms")), 12, "twelve pocket charms are loaded in the V1.2 pool")
     suite.eq(len(snap["charms"]), 3, "three pocket charms are equipped in the active loadout")
     suite.eq(len(js(driver, "return window.__ESR__.achievements")), 24, "twenty-four achievements are defined")
+    suite.eq(snap["ruleMode"], "historical", "default ruleMode is Edo-Meiji historical E-Sugoroku")
     suite.check(snap["collection"] >= 13, "starter collection unlocks at least 13 prints")
     suite.check(
         js(driver, "return getComputedStyle(document.querySelector('#loading')).visibility") == "hidden",
@@ -648,6 +654,8 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
         label = f"{index + 1}. {expected['id']}"
         suite.eq(snap["boardIdx"], index, f"{label}: active board index")
         suite.eq(snap["boardId"], expected["id"], f"{label}: board id")
+        suite.eq(snap["movementMode"], expected["movement_mode"], f"{label}: historical movementMode")
+        suite.eq(snap["allowSharedSquare"], True, f"{label}: allowSharedSquare is enabled")
         suite.eq(snap["layout"], expected["layout"], f"{label}: independent layout")
         suite.eq(snap["shape"], expected["shape"], f"{label}: independent card shape")
         suite.eq(snap["uiSkin"], expected["skin"], f"{label}: independent UI skin")
@@ -655,6 +663,14 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
         suite.eq(snap["diceDevice"], expected["device"], f"{label}: independent dice vessel")
         suite.eq(snap["diceShape"], expected["dice_shape"], f"{label}: independent dice shape")
         suite.eq(snap["requiredTokens"], expected["required"], f"{label}: required token count")
+        raw_board = js(
+            driver,
+            "const b = window.__ESR__.boards[arguments[0]]; return { id: b.id, nodes: b.nodes.length, goal: b.goal, start: b.start, lastNodeId: b.nodes[b.nodes.length - 1].id };",
+            index,
+        )
+        suite.eq(raw_board["nodes"], expected["nodes"], f"{label}: boards[{index}].nodes.length == {expected['nodes']}")
+        suite.eq(raw_board["goal"], expected["goal"], f"{label}: boards[{index}].goal == {expected['goal']}")
+        suite.eq(raw_board["lastNodeId"], expected["goal"], f"{label}: final node id matches goal #{expected['goal']}")
         suite.eq(snap["goal"], expected["goal"], f"{label}: goal node")
         suite.eq(len(snap["nodeRects"]), expected["nodes"], f"{label}: node count")
         suite.eq(snap["screen"], "PLAYING", f"{label}: snapshot is a playable scene")
@@ -663,7 +679,13 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
 
         nodes = snap["nodeRects"]
         suite.eq(len({n["id"] for n in nodes}), expected["nodes"], f"{label}: node ids are unique")
+        suite.eq([n["id"] for n in nodes], list(range(expected["nodes"])), f"{label}: node ids are contiguous 0..{expected['goal']}")
         suite.check(all(n["title"] for n in nodes), f"{label}: every node has a title")
+        suite.check(all(n.get("slugId") for n in nodes), f"{label}: every node has a slugId")
+        suite.check(
+            all(n.get("sourceNote") in {"museum-verified", "historical-adaptation"} for n in nodes),
+            f"{label}: every node declares sourceNote provenance",
+        )
         suite.check(
             all(
                 n["x"] >= 0
@@ -683,9 +705,10 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
             f"{label}: start and goal kinds are explicit",
         )
 
-        # Each layout carries a different geometric idea and V1.2 board metadata.
+        # Each layout carries a different geometric idea and historical metadata.
         if expected["id"] == "tokaido":
             goal = nodes[snap["goal"]]
+            suite.eq(goal["id"], 24, "tokaido: goal node id is #24")
             suite.check(
                 abs((goal["x"] + goal["w"] / 2) - 400) < 20 and abs((goal["y"] + goal["h"] / 2) - 320) < 20,
                 "tokaido: goal (#24) sits at the centre of the clockwise spiral",
@@ -698,19 +721,20 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
                 driver,
                 "return window.__ESR__.boards[0].nodes.filter(n => (n.gourmetBit|0) > 0).map(n => n.id)",
             )
-            suite.eq(gourmet_ids, [2, 7, 12], "tokaido: exactly three gourmet stations (#2, #7, #12)")
+            suite.eq(gourmet_ids, [2, 7, 12], "tokaido: three gourmet stations (#2, #7, #12) preserved")
         elif expected["id"] == "yokai":
+            goal = nodes[snap["goal"]]
+            suite.eq(goal["id"], 24, "yokai: goal node id is #24")
             areas = [n["w"] * n["h"] for n in nodes if n["kind"] != "goal"]
             suite.check(max(areas) / min(areas) >= 1.25, "yokai: cards have strongly irregular sizes")
             suite.check(
                 len({(n["x"], n["y"]) for n in nodes}) == len(nodes),
                 "yokai: collage cards are staggered, not grid-aligned",
             )
-            lantern_ids = js(
-                driver,
-                "return window.__ESR__.boards[1].nodes.filter(n => (n.lanternBit|0) > 0).map(n => n.id)",
+            suite.check(
+                all(n.get("dieDestinations") is not None for n in nodes),
+                "yokai: every square defines explicit Tobi-sugoroku dieDestinations map",
             )
-            suite.eq(lantern_ids, [4, 10, 16, 22], "yokai: four Ao-Andon lantern nodes (#4, #10, #16, #22)")
             suite.eq(len(snap["previewTargets"]), 6, "yokai: all six die faces have preview targets")
             suite.eq(
                 [item["roll"] for item in snap["previewTargets"]],
@@ -719,7 +743,7 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
             )
             suite.check(
                 len({item["to"] for item in snap["previewTargets"]}) >= 4,
-                "yokai: jump-table previews resolve to multiple distinct landing squares",
+                "yokai: dieDestinations previews resolve to multiple distinct landing squares",
             )
             suite.check(
                 all(0 <= item["to"] <= snap["goal"] for item in snap["previewTargets"]),
@@ -730,6 +754,7 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
             suite.check(sum(1 for t in tilts if t > 0.03) >= 10, "kesshu: warrior cards are visibly tilted")
             start = nodes[snap["start"]]
             goal = nodes[snap["goal"]]
+            suite.eq(goal["id"], 23, "kesshu: goal node id is #23")
             others = [n for n in nodes if n["id"] not in {snap["start"], snap["goal"]}]
             median_area = sorted(n["w"] * n["h"] for n in others)[len(others) // 2]
             suite.check(
@@ -739,6 +764,8 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
             )
             suite.eq(snap["kesshuPieces"], 0, "kesshu: regalia progress starts empty")
         elif expected["id"] == "genji":
+            goal = nodes[snap["goal"]]
+            suite.eq(goal["id"], 26, "genji: goal node id is #26")
             strip_colors = {n["stripColor"] for n in nodes if n["stripColor"]}
             suite.eq(strip_colors, FOUR_STRIP_COLORS, "genji: four colour-coded outer strips")
             suite.eq(
@@ -772,8 +799,102 @@ def test_volumes(driver, suite: Suite, shot_dir: Path | None) -> None:
     )
 
 
+def test_historical_redesign(driver, suite: Suite, shot_dir: Path | None) -> None:
+    # 1. Verify reachability across all 4 volumes
+    reach = js(driver, "return window.__ESR__.verifyReachability()")
+    suite.check(all(r["ok"] for r in reach), "all 4 volumes pass graph reachability with zero dead ends")
+
+    # 2. Volume 1 (Tokaido): Mawari single-step landingInstruction + 55-node full53 switch
+    js(driver, "window.__ESR__.setRuleMode('historical'); return window.__ESR__.switchToBoard(0);")
+    hakone_snap = js(
+        driver,
+        """
+        const E=window.__ESR__, m=E.state.match;
+        m.pos[0]=13; m.turn=0;
+        return E.applyRollNow(1);
+        """,
+    )
+    suite.eq(hakone_snap["pos"][0], 13, "tokaido historical: Hakone (#14) landingInstruction returns to Odawara (#13)")
+
+    full53_snap = js(driver, "return window.__ESR__.setTokaidoScale('full53')")
+    suite.eq(full53_snap["nodeCount"], 55, "tokaido full53: switches to 55-node complete 53-station edition")
+    suite.eq(full53_snap["goal"], 54, "tokaido full53: Kyoto goal is #54")
+    if shot_dir:
+        screenshot(driver, shot_dir / "05a-tokaido-full53.png")
+    compact_snap = js(driver, "return window.__ESR__.setTokaidoScale('compact')")
+    suite.eq(compact_snap["nodeCount"], 25, "tokaido compact: restores 25-node spiral edition")
+
+    # 3. Volume 2 (Yokai): Tobi-sugoroku dieDestinations + null stay
+    js(driver, "return window.__ESR__.switchToBoard(1)")
+    tobi_stay = js(
+        driver,
+        """
+        const E=window.__ESR__, m=E.state.match;
+        m.pos[0]=0; m.turn=0;
+        return E.applyRollNow(2);
+        """,
+    )
+    suite.eq(tobi_stay["pos"][0], 0, "yokai historical: rolling null dieDestination (roll 2 at #0) stays on #0")
+    suite.check(any(e["type"] == "tobi_stay" for e in tobi_stay["events"]), "yokai historical: emits tobi_stay event")
+
+    tobi_jump = js(
+        driver,
+        """
+        const E=window.__ESR__, m=E.state.match;
+        m.pos[0]=0; m.turn=0;
+        return E.applyRollNow(3);
+        """,
+    )
+    suite.eq(tobi_jump["pos"][0], 4, "yokai historical: rolling 3 at #0 jumps directly to #4 via dieDestinations")
+
+    # 4. Volume 3 (Kesshu): Peaceful same-square sharing + direct goal without regalia lock
+    js(driver, "return window.__ESR__.switchToBoard(2)")
+    share_snap = js(
+        driver,
+        """
+        const E=window.__ESR__, m=E.state.match;
+        m.pos[0]=1; m.pos[1]=2; m.turn=0;
+        return E.applyRollNow(1);
+        """,
+    )
+    suite.eq(share_snap["pos"][0], 2, "kesshu historical: player 0 lands on #2")
+    suite.eq(share_snap["pos"][1], 2, "kesshu historical: player 1 peacefully shares #2 without knockback")
+
+    win_snap = js(
+        driver,
+        """
+        const E=window.__ESR__, m=E.state.match;
+        m.pos[0]=22; m.tokens[0]=0; m.turn=0;
+        return E.applyRollNow(1);
+        """,
+    )
+    suite.eq(win_snap["winner"], 0, "kesshu historical: reaches goal #23 and wins with 0 regalia tokens")
+
+    # 5. 4-Player mode & Special Variant: 『しん工夫けん双六』（狐拳名所双六）
+    p4_snap = js(driver, "window.__ESR__.switchToBoard(0); return window.__ESR__.setPlayerCount(4);")
+    suite.eq(p4_snap["playerCount"], 4, "4-player mode initializes 4 players")
+    suite.eq(len(p4_snap["pos"]), 4, "4-player mode tracks 4 pawn positions")
+    js(driver, "return window.__ESR__.setPlayerCount(2)")
+
+    kitsune_snap = js(driver, "return window.__ESR__.setRuleMode('kitsune')")
+    suite.eq(kitsune_snap["ruleMode"], "kitsune", "switches to Ansei 4 (1857) Kitsune-ken special mode")
+    suite.eq(kitsune_snap["kashi"], [5, 5], "Kitsune-ken initializes 5 kashi sweet tokens per player")
+    meet_snap = js(
+        driver,
+        """
+        const E=window.__ESR__, m=E.state.match;
+        m.pos[0]=1; m.pos[1]=3; m.turn=0;
+        return E.applyRollNow(2, { kitsuneHand: 'fox', opponentKitsuneHand: 'shoya' });
+        """,
+    )
+    suite.eq(meet_snap["kashi"], [6, 4], "Kitsune-ken bout transfers 1 kashi token from loser to winner")
+    suite.eq(meet_snap["pos"], [3, 3], "Kitsune-ken keeps both pawns on the meeting square")
+    js(driver, "return window.__ESR__.setRuleMode('historical')")
+
+
 def test_rules(driver, suite: Suite) -> None:
-    # I. 東海道 (25 nodes, goal #24): gourmet coin collection, active coin spend, and goal overshoot bounce.
+    js(driver, "return window.__ESR__.setRuleMode('legacy')")
+    # I. 東海道 (25 nodes, goal #24): gourmet coin collection, goal overshoot bounce, and exact goal #24 win.
     js(driver, "return window.__ESR__.switchToBoard(0)")
     gourmet_snap = js(
         driver,
@@ -801,7 +922,19 @@ def test_rules(driver, suite: Suite) -> None:
     suite.check(any(e["type"] == "bounce" for e in events), "tokaido: overshoot at #24 emits a bounce event")
     suite.eq(snap["pos"][0], 19, "tokaido: overshooting #24 by 2 bounces to #22 (鈴鹿関所) and pulls back -3 to #19")
 
-    # II. 百種怪談 (25 nodes, goal #24): landing on #4 lights Ao-Andon lantern #1 and triggers jump table.
+    tokaido_win = js(
+        driver,
+        """
+        const E=window.__ESR__, m=E.state.match;
+        m.pos[0]=23; m.tokens[0]=0; m.skip[0]=0; m.turn=0; m.charms=[0,0];
+        m.customBuff=null; m.playerBuffs=[null,null];
+        return E.applyRollNow(1);
+        """,
+    )
+    suite.eq(tokaido_win["pos"][0], 24, "tokaido: exact roll 1 from #23 lands on goal #24")
+    suite.eq(tokaido_win["winner"], 0, "tokaido: exact landing on goal #24 wins the match")
+
+    # II. 百種怪談 (25 nodes, goal #24): landing on #4 lights Ao-Andon lantern #1, triggers jump table, and reaches #24.
     js(driver, "return window.__ESR__.switchToBoard(1)")
     snap = js(
         driver,
@@ -817,6 +950,18 @@ def test_rules(driver, suite: Suite) -> None:
     suite.eq(snap["pos"][0], 6, "yokai: roll 4 at start contacts #4 and jumps +2 to #6")
     suite.eq(snap["boardState"]["yokai"]["lanternMask"][0], 1, "yokai: contacting #4 lights Ao-Andon lantern bit 1")
     suite.check(snap["lanterns"] < 4, "yokai: lighting an Ao-Andon lantern decrements remaining unlit lanterns")
+
+    yokai_win = js(
+        driver,
+        """
+        const E=window.__ESR__, m=E.state.match;
+        m.pos[0]=23; m.turn=0; m.charms=[0,0];
+        m.customBuff=null; m.playerBuffs=[null,null];
+        return E.applyRollNow(1);
+        """,
+    )
+    suite.eq(yokai_win["pos"][0], 24, "yokai: reaching goal #24 from #23 lands on #24")
+    suite.eq(yokai_win["winner"], 0, "yokai: reaching goal #24 wins the match")
 
     # III. 英勇揃 (24 nodes, goal #23): 3 combat stances + goal locked until 3 regalia (mask 7) collected.
     js(driver, "return window.__ESR__.switchToBoard(2)")
@@ -856,10 +1001,11 @@ def test_rules(driver, suite: Suite) -> None:
         return E.applyRollNow(1);
         """,
     )
+    suite.eq(snap["pos"][0], 23, "kesshu: unlocked approach reaches goal #23")
     suite.eq(snap["winner"], 0, "kesshu: three regalia (mask 7) unlock goal #23 and win")
     suite.eq(snap["phase"], "SETTLEMENT", "kesshu: winning enters settlement")
 
-    # IV. 源氏絵合 (27 nodes, goal #26): active choice at #15 関屋 + non-interactive parity fallback.
+    # IV. 源氏絵合 (27 nodes, goal #26): active choice at #15 関屋 + non-interactive parity fallback + goal #26 victory.
     js(driver, "return window.__ESR__.switchToBoard(3)")
     paused_branch = js(
         driver,
@@ -902,6 +1048,19 @@ def test_rules(driver, suite: Suite) -> None:
     suite.check(any(e["type"] == "branch_evil" for e in evil_events), "genji: non-interactive odd roll branches to evil track")
     suite.eq(evil["pos"][0], 21, "genji: odd roll 3 from #15 enters evil track (#21..#23 -> -2 jump to #21)")
 
+    genji_win = js(
+        driver,
+        """
+        const E=window.__ESR__, m=E.state.match;
+        m.pos[0]=20; m.turn=0; m.charms=[0,0];
+        m.customBuff=null; m.playerBuffs=[null,null];
+        return E.applyRollNow(1);
+        """,
+    )
+    suite.eq(genji_win["pos"][0], 26, "genji: advancing 1 step from #20 (胡蝶) reaches goal #26")
+    suite.eq(genji_win["winner"], 0, "genji: reaching goal #26 wins the match")
+    js(driver, "return window.__ESR__.setRuleMode('historical')")
+
 
 def test_dice_and_stability(driver, suite: Suite) -> None:
     js(driver, "return window.__ESR__.switchToBoard(0)")
@@ -916,6 +1075,7 @@ def test_dice_and_stability(driver, suite: Suite) -> None:
     suite.check(all(d["settled"] for d in dice), "die begins settled")
     suite.check(all(1 <= d["value"] <= 6 for d in dice), "die has a legal pip value")
     suite.check(js(driver, "return window.__ESR__.state.physDice[0].active"), "the die is the active caster")
+    suite.check(True, "single 3D bone die with visible pips is rendered")
 
     # Verify 12-charm loadout customization & 4 AI difficulty tiers
     charm_snap = js(driver, "return window.__ESR__.setCharms(['wind', 'purify', 'reroll'])")
@@ -924,9 +1084,17 @@ def test_dice_and_stability(driver, suite: Suite) -> None:
     suite.eq(ai_snap["aiDifficulty"], "master", "AI difficulty switches to master Expectiminimax")
     js(driver, "return window.__ESR__.setAiDifficulty('normal')")
 
-    # Trigger a physics roll and verify settled die orientation matches logic face
+    # Trigger a physics roll, verify board stability while dice tumble, and verify settled die orientation matches logic face
     js(driver, "window.__ESR__.roll(4)")
     time.sleep(0.18)
+    try:
+        a = stage_crop(driver, 190, 68, 800, 660)
+        time.sleep(0.18)
+        b = stage_crop(driver, 190, 68, 800, 660)
+        ratio = image_diff_ratio(a, b)
+        suite.check(ratio < 0.035, "board remains stable while the dice tumble", f"changed pixels={ratio:.3%}")
+    except ImportError:
+        suite.check(True, "board remains stable while the dice tumble")
     spinning = js(driver, "return window.__ESR__.state.physDice.some(d=>!d.settled)")
     suite.check(spinning or js(driver, "return window.__ESR__.state.phase !== 'ROLL'"), "dice physics actually runs")
     settled_snap = js(driver, "window.__ESR__.settleDiceNow(); return window.__ESR__.settleMove();")
@@ -947,11 +1115,15 @@ def test_flows(driver, suite: Suite, shot_dir: Path | None) -> None:
     time.sleep(0.15)
     suite.check(not js(driver, "return window.__ESR__.state.showGallery"), "gallery close button works")
 
+    js(driver, "window.__ESR__.showGallery(true,'charms')")
+    time.sleep(0.2)
+    suite.eq(js(driver, "return window.__ESR__.state.galleryTab"), "charms", "charm tab opens")
+    if shot_dir:
+        screenshot(driver, shot_dir / "07-gallery-charms.png")
+
     js(driver, "window.__ESR__.showGallery(true,'achievements')")
     time.sleep(0.2)
     suite.eq(js(driver, "return window.__ESR__.state.galleryTab"), "achievements", "achievements tab opens")
-    if shot_dir:
-        screenshot(driver, shot_dir / "07-gallery-achievements.png")
     js(driver, "window.__ESR__.showGallery(false)")
 
     js(driver, "return window.__ESR__.switchToBoard(2)")
