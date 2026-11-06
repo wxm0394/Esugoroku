@@ -4,10 +4,13 @@
 // Zero-dependency static preview server for E-Sugoroku.
 // Serves ./mobile on port 8090 by default with strict no-cache headers.
 
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const { URL } = require('url');
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { URL, fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const ROOT = path.resolve(__dirname, 'mobile');
 const PUBLIC_ROOT = path.resolve(__dirname, 'public');
@@ -164,4 +167,4 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
   });
 }
 
-module.exports = server;
+export default server;

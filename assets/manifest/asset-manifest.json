@@ -79,6 +79,114 @@
         "sourceUrl": "https://www.tnm.jp/collection/..."
       }
     },
+    "artwork.sheet.tokaido.jinja": {
+      "type": "image",
+      "path": "public/assets/aistudio/v2-de9b2227c1ae60d2ad93091f2c368ba2_r_33d70672.jpg",
+      "group": "board.tokaido",
+      "platforms": ["web", "mobile", "embedded"],
+      "variants": [],
+      "metadata": {
+        "description": "Tokaido Edo Jinja master sheet",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED"
+      }
+    },
+    "artwork.sheet.tokaido.map": {
+      "type": "image",
+      "path": "public/assets/aistudio/v2-0287deb0080d07adcf42166238672c64_r_b2a0b162.jpg",
+      "group": "board.tokaido",
+      "platforms": ["web", "mobile", "embedded"],
+      "variants": [],
+      "metadata": {
+        "description": "Tokaido Map master sheet",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED"
+      }
+    },
+    "artwork.sheet.tokaido.meibutsu": {
+      "type": "image",
+      "path": "public/assets/aistudio/v2-a25c0e4de38fc6975ace74efb5fd39cc_r_b65cdc4b.jpg",
+      "group": "board.tokaido",
+      "platforms": ["web", "mobile", "embedded"],
+      "variants": [],
+      "metadata": {
+        "description": "Tokaido Meibutsu master sheet",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED"
+      }
+    },
+    "artwork.sheet.yokai.collage": {
+      "type": "image",
+      "path": "public/assets/aistudio/v2-be2eef69ff02fff49f3a362045aa1bb0_r_5a6413a7.jpg",
+      "group": "board.yokai",
+      "platforms": ["web", "mobile", "embedded"],
+      "variants": [],
+      "metadata": {
+        "description": "Yokai Collage master sheet",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED"
+      }
+    },
+    "artwork.sheet.yokai.kabuki": {
+      "type": "image",
+      "path": "public/assets/aistudio/v2-ec2e63aab108e2656b088d7dfba6b0ce_r_f3890e4f.jpg",
+      "group": "board.yokai",
+      "platforms": ["web", "mobile", "embedded"],
+      "variants": [],
+      "metadata": {
+        "description": "Yokai Kabuki master sheet",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED"
+      }
+    },
+    "artwork.sheet.kesshu.tilted": {
+      "type": "image",
+      "path": "public/assets/aistudio/v2-66c8cbba45a5e5db3bbeae4d884a556c_r_a1e662dd.jpg",
+      "group": "board.kesshu",
+      "platforms": ["web", "mobile", "embedded"],
+      "variants": [],
+      "metadata": {
+        "description": "Kesshu Tilted master sheet",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED"
+      }
+    },
+    "artwork.sheet.kesshu.portraits": {
+      "type": "image",
+      "path": "public/assets/aistudio/v2-c6536ca0828d251624fa2494fdc2d7e8_r_cf951d0e.jpg",
+      "group": "board.kesshu",
+      "platforms": ["web", "mobile", "embedded"],
+      "variants": [],
+      "metadata": {
+        "description": "Kesshu Portraits master sheet",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED"
+      }
+    },
+    "artwork.sheet.genji.strips": {
+      "type": "image",
+      "path": "public/assets/aistudio/v2-2ea7f57afdf0bf62b4d0d8854269efe9_r_cfd81106.jpg",
+      "group": "board.genji",
+      "platforms": ["web", "mobile", "embedded"],
+      "variants": [],
+      "metadata": {
+        "description": "Genji Strips master sheet",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED"
+      }
+    },
+    "artwork.sheet.genji.palace": {
+      "type": "image",
+      "path": "public/assets/aistudio/v2-fd75dd6025dfca9de24f93b336657329_r_2483b494.jpg",
+      "group": "board.genji",
+      "platforms": ["web", "mobile", "embedded"],
+      "variants": [],
+      "metadata": {
+        "description": "Genji Palace master sheet",
+        "historicalStatus": "historical-adaptation",
+        "license": "UNVERIFIED"
+      }
+    },
     "piece.kokeshi": {
       "type": "model",
       "path": "models/characters/kokeshi/kokeshi.glb",

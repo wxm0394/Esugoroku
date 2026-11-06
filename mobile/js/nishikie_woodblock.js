@@ -40,6 +40,19 @@ export const MASTER_SHEETS = {
   genji_palace: '/assets/aistudio/v2-fd75dd6025dfca9de24f93b336657329_r_2483b494.jpg',
 };
 
+// Mapping between MASTER_SHEETS keys and official V2.1 Asset IDs
+export const SHEET_KEY_TO_ASSET_ID = {
+  tokaido_jinja: 'artwork.sheet.tokaido.jinja',
+  tokaido_map: 'artwork.sheet.tokaido.map',
+  tokaido_meibutsu: 'artwork.sheet.tokaido.meibutsu',
+  yokai_collage: 'artwork.sheet.yokai.collage',
+  yokai_kabuki: 'artwork.sheet.yokai.kabuki',
+  kesshu_tilted: 'artwork.sheet.kesshu.tilted',
+  kesshu_portraits: 'artwork.sheet.kesshu.portraits',
+  genji_strips: 'artwork.sheet.genji.strips',
+  genji_palace: 'artwork.sheet.genji.palace',
+};
+
 // Asset ID to MASTER_SHEETS key mapping
 export const MASTER_SHEET_KEY_MAP = {
   'board.tokaido.background': 'tokaido_jinja',
@@ -80,7 +93,9 @@ export function preloadUkiyoeSheets(onUpdate) {
   preloadStarted = true;
   if (typeof Image === 'undefined') return;
 
-  for (const [key, url] of Object.entries(MASTER_SHEETS)) {
+  for (const [key, fallbackUrl] of Object.entries(MASTER_SHEETS)) {
+    const assetId = SHEET_KEY_TO_ASSET_ID[key];
+    const url = (assetId ? AssetManager.getUrl(assetId) : null) || fallbackUrl;
     const img = new Image();
     img.decoding = 'async';
     img.onload = () => {
