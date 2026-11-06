@@ -1,5 +1,5 @@
 // Global state G, screen geometry and shared canvas helpers.
-import { BOARDS, CHARMS, createMatch, getBoard } from './boards.js';
+import { BOARDS, CHARMS, createMatch, getBoard, getCardById } from './boards.js';
 
 export const canvas = document.getElementById('stage');
 export const ctx = canvas.getContext('2d');
@@ -99,6 +99,9 @@ function loadProfile() {
 }
 
 const saved = loadProfile();
+const initialCustomCard = (saved?.customHandCard && getCardById(saved.customHandCard))
+  ? saved.customHandCard
+  : 'tokaido_01';
 
 export const G = {
   screen: 'SELECT_BOARD', // 'SELECT_BOARD' | 'SELECT_SIDE' | 'PLAYING'
@@ -110,7 +113,10 @@ export const G = {
   hoverPlayBtn: -1,
   hoverSettleBtn: -1,
   humanSide: 0,
-  match: createMatch(0, { humanSide: 0, charms: ['stay', 'guard', 'dash'] }),
+  customHandCard: initialCustomCard,
+  showHandPicker: false,
+  handPickerFilter: 'all',
+  match: createMatch(0, { humanSide: 0, charms: ['stay', 'guard', 'dash'], customCard: initialCustomCard }),
   charms: ['stay', 'guard', 'dash'],
   collection: new Set(saved?.collection?.length ? saved.collection : DEFAULT_COLLECTION),
   newCards: [],
@@ -126,12 +132,20 @@ export const G = {
     hold: false,
   },
   physDice: [
-    { x: 1110, y: 620, z: 0, vx: 0, vy: 0, vz: 0, rx: -Math.PI / 2, ry: 0.4, rz: 0, wx: 0, wy: 0, wz: 0, value: 1, settled: true, active: true },
+    { x: 1120, y: 625, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, ry: 0.25, rz: 0, wx: 0, wy: 0, wz: 0, value: 1, settled: true, active: true },
   ],
   pieceAnim: null,
   pendingRoll: 0,
   humanRollDone: false,
   aiTimer: 0,
+  turnTransition: {
+    count: 0,
+    fromSide: 0,
+    toSide: 0,
+    direction: 'to-human',
+    active: false,
+    timestamp: 0,
+  },
   statusText: '竹筒を押さえて振り、指を離して賽を投げよ',
   statusSub: '出目に従い、絵双六の道を進む',
   toast: null,
@@ -157,11 +171,21 @@ export const G = {
   stats: { turns: 0, jumps: 0, duels: 0, cards: 0 },
   lastResult: null,
   banner: '江戸浮世絵・絵双六',
-  audioEnabled: true,
+  audioEnabled: saved?.audioEnabled !== undefined ? Boolean(saved.audioEnabled) : true,
+  bgmEnabled: saved?.bgmEnabled !== undefined ? Boolean(saved.bgmEnabled) : true,
 };
 
 export function currentBoard() {
   return getBoard(G.boardIdx);
+}
+
+export function currentHandCard() {
+  return getCardById(G.customHandCard);
+}
+
+export function isPreGameMatch() {
+  if (!G.match) return true;
+  return (G.match.turnCount || 0) === 0 && !G.rollPending && G.phase === 'ROLL' && (G.match.winner ?? -1) < 0;
 }
 
 export function saveProfile() {
@@ -169,15 +193,35 @@ export function saveProfile() {
     localStorage.setItem('esugoroku.profile.v1', JSON.stringify({
       collection: [...G.collection],
       charms: G.charms,
+      customHandCard: G.customHandCard,
+      audioEnabled: G.audioEnabled,
+      bgmEnabled: G.bgmEnabled,
     }));
   } catch {
     // Private browsing / storage disabled: the game remains playable.
   }
 }
 
+export function setCustomHandCard(cardId) {
+  if (!cardId) {
+    G.customHandCard = null;
+    saveProfile();
+    return null;
+  }
+  const card = getCardById(cardId);
+  if (!card) return null;
+  G.customHandCard = card.id;
+  saveProfile();
+  return card;
+}
+
 export function resetMatchState() {
   const board = currentBoard();
-  G.match = createMatch(G.boardIdx, { humanSide: G.humanSide, charms: G.charms });
+  G.match = createMatch(G.boardIdx, {
+    humanSide: G.humanSide,
+    charms: G.charms,
+    customCard: G.customHandCard,
+  });
   G.phase = 'ROLL';
   G.dice = [1, 0];
   G.diceValue = 1;
@@ -188,9 +232,10 @@ export function resetMatchState() {
   G.yokaiLanterns = 4;
   G.yokaiFrenzy = false;
   G.yokaiFrenzyUsed = false;
-  G.kesshuPieces = 0;
+  const initTok = G.match.tokens?.[G.humanSide] || 0;
+  G.kesshuPieces = [1, 2, 4].filter(m => initTok & m).length;
   G.genjiBalance = 0;
-  G.tokaidoGourmet = [];
+  G.tokaidoGourmet = (initTok & 1) ? [0] : [];
   G.camera = { zoom: 1, focus: { x: BOARD_RECT.x + BOARD_RECT.w / 2, y: BOARD_RECT.y + BOARD_RECT.h / 2 } };
   G.cutIn = null;
   G.hop = { seg: -1, path: null };

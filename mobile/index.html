@@ -38,7 +38,7 @@
       <header class="topbar">
         <div class="topbar-brand">
           <span class="brand-seal">双</span>
-          <span class="brand-title">江戸浮世絵・立体絵双六</span>
+          <span class="brand-title">江戸浮世絵双六</span>
         </div>
 
         <nav class="topbar-nav" aria-label="画帖切替と視点">
@@ -53,9 +53,11 @@
         </nav>
 
         <div class="topbar-actions">
+          <button type="button" id="btn-ukiyoe-filter" class="action-btn ukiyoe-filter-btn" data-mode="nishikie" title="浮世絵木版画シェーダー切替: 墨線輪郭検出＋奉書紙肌理オーバーレイ (Uキー)">🖌️ 版画: 錦絵摺</button>
           <button type="button" id="btn-tutorial" class="action-btn secondary">📖 新手引導</button>
           <button type="button" id="btn-gallery" class="action-btn secondary">🖼️ 錦絵図鑑</button>
-          <button type="button" id="btn-audio" class="action-btn secondary">🔊 効果音: 開</button>
+          <button type="button" id="btn-bgm" class="action-btn secondary bgm-toggle-btn" data-bgm="on" aria-pressed="true" title="三味線・箏の和楽器BGM（雅楽）を効果音とは独立して開閉切替 (Mキー)">🪕 絃楽: 開</button>
+          <button type="button" id="btn-audio" class="action-btn secondary sfx-toggle-btn" data-sfx="on" aria-pressed="true" title="骨骰・檜木駒の効果音（SFX）をBGMとは独立して開閉切替">🔊 効果音: 開</button>
           <button type="button" id="btn-lobby" class="action-btn primary">画帖一覧</button>
         </div>
       </header>
@@ -69,6 +71,20 @@
         </div>
         <button type="button" id="btn-coach-help" class="coach-help-btn">遊び方詳細</button>
       </section>
+    </div>
+
+    <!-- Subtle Washi Woodblock "Page Turn" (画帖めくり・手番交代) Transition Overlay -->
+    <div id="turn-page-sweep" class="turn-page-sweep" data-direction="to-human" aria-hidden="true">
+      <div class="turn-page-curl">
+        <div class="turn-page-crease"></div>
+      </div>
+      <div class="turn-page-plaque">
+        <span class="turn-page-seal" id="turn-page-seal">旅</span>
+        <div class="turn-page-copy">
+          <strong id="turn-page-text">手番交代 ─ あなたの番</strong>
+          <span id="turn-page-sub">画帖めくり · 賽を振って進みましょう</span>
+        </div>
+      </div>
     </div>
 
     <!-- Floating Event Stamp / Toast Banner -->
@@ -87,9 +103,9 @@
         <!-- Zone 1: Players & Board Progress -->
         <div class="dock-section dock-players">
           <div class="dock-section-header">
-            <span id="dock-volume-title">巻ノ壱・東海道五十三次</span>
+            <span id="dock-volume-title">巻ノ壱・東海道五十三次（全25格）</span>
             <span class="dock-meta-sep">·</span>
-            <span id="dock-rule-tag">廻り双六（点点一致で上り）</span>
+            <span id="dock-rule-tag">二重廻り・追突攻防双六</span>
           </div>
           <div class="player-rows">
             <div class="player-row active" id="player-row-0">
@@ -108,55 +124,81 @@
             </div>
           </div>
           <div class="board-special-meter" id="board-special-meter">
-            宿場名物: 0 / 3 獲得 · 残り歩数: 16格
+            🍱 名物: 0/3 · ⚔️ 追突弾き: 0回 · 上りまで残り 24格
           </div>
         </div>
 
-        <!-- Zone 2: Tile Inspector & 3 Pocket Talismans -->
+        <!-- Zone 2: High-Clarity Woodblock Art Loupe + Tile Inspector & Rechargeable Talismans -->
         <div class="dock-section dock-inspector">
-          <div class="inspector-card">
-            <div class="inspector-header">
-              <span class="inspector-Index" id="insp-id">#0</span>
-              <strong class="inspector-title" id="insp-title">日本橋（振出・起点）</strong>
-              <span class="inspector-kind" id="insp-kind">起点</span>
+          <div class="inspector-card-with-art">
+            <div class="inspector-art-frame" id="inspector-art-frame" title="クリックで浮世絵大判拡大鏡を表示">
+              <canvas id="inspector-art-canvas" width="360" height="252" aria-label="選択マスの浮世絵拡大図"></canvas>
+              <span class="inspector-zoom-hint">🔍 拡大</span>
             </div>
-            <p class="inspector-desc" id="insp-desc">五街道の起点。ここから賽を振って京・八百善の大上り（#16）を目指します。</p>
+            <div class="inspector-card">
+              <div class="inspector-header">
+                <span class="inspector-Index" id="insp-id">#0</span>
+                <strong class="inspector-title" id="insp-title">日本橋（振出・起点）</strong>
+                <span class="inspector-kind" id="insp-kind">起点</span>
+              </div>
+              <p class="inspector-desc" id="insp-desc">五街道の起点。外周十六宿から内周八宿を経て京・八百善の大上り（#24）を目指します。同格追突で相手を2格弾き飛ばします！</p>
+            </div>
           </div>
-          <div class="charm-strip" aria-label="懐中守り札">
-            <div class="charm-item active" data-charm="stay" title="泊マスに止まった時、一休みを自動で無効化します">
+          <div class="charm-strip" aria-label="懐中守り札と自定义手札（初期Buff）">
+            <div class="charm-item active" data-charm="stay" title="泊マスの一休みを自動で無効化（4ラウンドごとに再充填）">
               <span class="charm-kanji">宿</span>
               <div class="charm-text">
                 <strong>宿場守り</strong>
-                <span>「泊」休みを一回無効化</span>
+                <span>「泊」休みを無効化</span>
               </div>
             </div>
-            <div class="charm-item active" data-charm="guard" title="怪異マスで後ろへ戻される跳びを自動で防ぎます">
+            <div class="charm-item active" data-charm="guard" title="関所や妖怪の後ろ戻り跳びを自動で防ぐ（4ラウンドごとに再充填）">
               <span class="charm-kanji">封</span>
               <div class="charm-text">
-                <strong>妖怪封じ</strong>
-                <span>後ろ戻りの跳びを無効化</span>
+                <strong>妖怪・関所封じ</strong>
+                <span>後ろ戻りを無効化</span>
               </div>
             </div>
-            <div class="charm-item active" data-charm="dash" title="最初の1投目で自動的に歩数を+1格伸ばします">
+            <div class="charm-item active" data-charm="dash" title="出目を＋1歩加速（4ラウンドごとに再充填）">
               <span class="charm-kanji">駆</span>
               <div class="charm-text">
                 <strong>早駕籠</strong>
-                <span>初手の出目を＋1歩加速</span>
+                <span>出目を＋1歩加速</span>
               </div>
             </div>
+            <!-- 4th Slot: Custom Hand Card (自定义手札) from Collected Ukiyo-e Prints -->
+            <button type="button" class="charm-item custom-hand-slot active" id="custom-hand-slot" data-charm="custom" title="対局開始前に蒐集した錦絵から1枚を選び、初期Buff（加護）として懐中に装備できます（クリックで手札変更）">
+              <div class="custom-hand-thumb-wrap">
+                <canvas id="custom-hand-canvas" width="96" height="68" aria-hidden="true"></canvas>
+                <span class="charm-kanji custom-hand-seal" id="custom-hand-seal">先</span>
+              </div>
+              <div class="charm-text custom-hand-text">
+                <div class="custom-hand-title-row">
+                  <strong id="custom-hand-title">自定义手札: 日本橋朝市</strong>
+                  <span class="custom-hand-badge" id="custom-hand-badge">開幕前変更可</span>
+                </div>
+                <span id="custom-hand-buff">先駆出立: 開幕+2格・初手+1歩</span>
+              </div>
+            </button>
           </div>
         </div>
 
-        <!-- Zone 3: Big 3D Dice Readout & Roll CTA -->
+        <!-- Zone 3: Big 3D Dice Readout, Tactical Strike & Roll CTA -->
         <div class="dock-section dock-dice">
-          <div class="dice-readout-box">
-            <div class="die-face-preview" id="die-face-preview" data-value="1" aria-label="現在の出目">
-              <span class="pip center red"></span>
+          <div class="dice-top-row">
+            <div class="dice-readout-box">
+              <div class="die-face-preview" id="die-face-preview" data-value="1" aria-label="現在の出目">
+                <span class="pip center red"></span>
+              </div>
+              <div class="dice-readout-meta">
+                <div class="dice-label">直近の賽の目</div>
+                <div class="dice-number" id="dice-number-text">壱 (1点)</div>
+              </div>
             </div>
-            <div class="dice-readout-meta">
-              <div class="dice-label">直近の賽の目</div>
-              <div class="dice-number" id="dice-number-text">壱 (1点)</div>
-            </div>
+            <button type="button" id="btn-strike" class="strike-cta-btn" title="相手を2格後ろへ引き戻す奇襲戦術（4手に1回使用可能）">
+              <span class="strike-main">🌪️ 辻風奇襲</span>
+              <span class="strike-sub" id="strike-sub-text">相手を-2格戻す</span>
+            </button>
           </div>
           <button type="button" id="btn-roll" class="roll-cta-btn">
             <span class="roll-cta-main">🎲 賽を振る (Space)</span>
@@ -166,58 +208,134 @@
       </footer>
     </div>
 
+    <!-- High-Resolution Woodblock Card Loupe Modal (大判浮世絵拡大鏡) -->
+    <div id="loupe-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="浮世絵大判拡大鏡">
+      <div class="modal-panel loupe-panel">
+        <div class="modal-header">
+          <div>
+            <h2 class="modal-title" id="loupe-title">#0 日本橋</h2>
+            <p class="modal-subtitle" id="loupe-sub">東海道・御府内名物道中双六</p>
+          </div>
+          <button type="button" id="btn-loupe-close" class="modal-close-btn">✕ 閉じる</button>
+        </div>
+        <div class="loupe-body">
+          <canvas id="loupe-canvas" width="900" height="640"></canvas>
+          <p class="loupe-rule" id="loupe-rule"></p>
+        </div>
+      </div>
+    </div>
+
     <!-- Board Selection / Lobby Screen Overlay -->
     <div id="lobby-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="四巻の浮世絵画帖を選択">
       <div class="modal-panel lobby-panel">
         <div class="modal-header">
           <div>
-            <h1 class="modal-title">江戸浮世絵・立体絵双六 ─ 画帖選択</h1>
-            <p class="modal-subtitle">遊びたい浮世絵画帖（全四巻）を選んで対局を開始してください。各巻ごとに独自の立体盤面と規則が楽しめます。</p>
+            <h1 class="modal-title">江戸浮世絵・立体絵双六 ─ 画帖選択（拡張攻防版）</h1>
+            <p class="modal-subtitle">全四巻とも24〜27格の大盤面に拡張！開幕前に蒐集錦絵から「自定义手札（初期Buff）」を1枚選び、白熱の攻防拉鋸戦に挑みましょう。</p>
           </div>
           <button type="button" id="btn-lobby-close" class="modal-close-btn">✕ 盤面へ戻る</button>
         </div>
 
+        <div class="lobby-hand-bar" id="lobby-hand-bar">
+          <div class="lobby-hand-info">
+            <span class="lobby-hand-tag">🃏 懐中「自定义手札」初期Buff</span>
+            <strong id="lobby-hand-card-name">日本橋朝市（先駆出立の加護）</strong>
+            <span id="lobby-hand-card-desc">開幕+2格前進・初手出目+1歩</span>
+          </div>
+          <button type="button" id="btn-lobby-change-hand" class="action-btn secondary">🖼️ 蒐集錦絵から手札を変更する</button>
+        </div>
+
         <div class="lobby-grid">
           <article class="volume-card" data-select-board="0">
-            <div class="volume-card-badge">巻ノ壱 · 初心者おすすめ</div>
+            <div class="volume-card-banner">
+              <img src="/assets/aistudio/v2-de9b2227c1ae60d2ad93091f2c368ba2_r_33d70672.jpg" alt="大日本神社・東海道名所雙六 古版画" loading="lazy">
+            </div>
+            <div class="volume-card-badge">巻ノ壱 · 二重渦巻回廊（全25格）</div>
             <h2 class="volume-card-title">東海道・御府内名物道中双六</h2>
-            <p class="volume-card-rule"><strong>廻り双六（渦巻回廊）</strong>：時計回りに進み、赤丸「泊」は1回休み、名物料理マスは前方へジャンプ！ゴールはぴったり止まる「点点一致」ルール。</p>
+            <p class="volume-card-rule"><strong>外周16宿＋内周8宿＋京大上り</strong>：名物料理で前進ジャンプ、箱根・新居・鈴鹿の関所で押し戻し、同格追突で相手を2格弾き飛ばす東海道大双六！</p>
             <div class="volume-card-footer">
-              <span>全17格 · 広重風錦絵</span>
+              <span>全25格 · 広重・貞秀風名所錦絵</span>
               <button type="button" class="volume-play-btn" data-play-board="0">この画帖で遊ぶ →</button>
             </div>
           </article>
 
           <article class="volume-card" data-select-board="1">
-            <div class="volume-card-badge">巻ノ弐 · 飛び双六</div>
+            <div class="volume-card-banner">
+              <img src="/assets/aistudio/v2-be2eef69ff02fff49f3a362045aa1bb0_r_5a6413a7.jpg" alt="江戸飛び双六・百物語古版画" loading="lazy">
+            </div>
+            <div class="volume-card-badge">巻ノ弐 · 百物語大迷宮（全25格）</div>
             <h2 class="volume-card-title">百物語・妖怪変化飛び双六</h2>
-            <p class="volume-card-rule"><strong>飛び双六（大小組絵）</strong>：出目1〜6ごとに異なるマスへ一気に飛ぶ古式双六。怪異マスで四隅の青行灯が消えると「百鬼夜行（飛距離2倍）」が発動！</p>
+            <p class="volume-card-rule"><strong>出目1〜6の飛び双六</strong>：前進ジャンプと怪異の逆戻りが交錯する25格。青行灯四灯が消えると「百鬼夜行（飛距離2倍）」で大逆転！</p>
             <div class="volume-card-footer">
-              <span>全13格 · 国芳・石燕風</span>
+              <span>全25格 · 国芳・豊国風組絵</span>
               <button type="button" class="volume-play-btn" data-play-board="1">この画帖で遊ぶ →</button>
             </div>
           </article>
 
           <article class="volume-card" data-select-board="2">
-            <div class="volume-card-badge">巻ノ参 · 武将集結</div>
+            <div class="volume-card-banner">
+              <img src="/assets/aistudio/v2-66c8cbba45a5e5db3bbeae4d884a556c_r_a1e662dd.jpg" alt="英勇揃伊呂波雙六・源平武者絵古版画" loading="lazy">
+            </div>
+            <div class="volume-card-badge">巻ノ参 · 武具奪取＆合戦（全24格）</div>
             <h2 class="volume-card-title">太平記・英雄武将決集双六</h2>
-            <p class="volume-card-rule"><strong>決集双六（扇面傾き札）</strong>：道中で三つの討入備え（兜・太刀・陣太鼓）をすべて集めなければ御前の上りが開かない戦略双六。同じマスに止まると一騎討ち！</p>
+            <p class="volume-card-rule"><strong>三備え集結＋一騎討ち奪取</strong>：三備え（兜・太刀・陣太鼓）を揃えるまで御前は開門しない。同じ格で一騎討ちになると相手を3格弾き＆武具を1つ奪取！</p>
             <div class="volume-card-footer">
-              <span>全14格 · 武者絵錦絵</span>
+              <span>全24格 · 芳虎・源平武者錦絵</span>
               <button type="button" class="volume-play-btn" data-play-board="2">この画帖で遊ぶ →</button>
             </div>
           </article>
 
           <article class="volume-card" data-select-board="3">
-            <div class="volume-card-badge">巻ノ肆 · 善悪二道</div>
+            <div class="volume-card-banner">
+              <img src="/assets/aistudio/v2-2ea7f57afdf0bf62b4d0d8854269efe9_r_cfd81106.jpg" alt="源氏絵合・奥御殿御祝儀雙六古版画" loading="lazy">
+            </div>
+            <div class="volume-card-badge">巻ノ肆 · 善悪二道長編（全27格）</div>
             <h2 class="volume-card-title">源氏物語・善玉悪玉道中双六</h2>
-            <p class="volume-card-rule"><strong>分かれ双六（善悪分岐）</strong>：分岐マスで偶数が出れば金色の「善道（近道）」、奇数が出れば紫の「悪道（足止め）」へ進む王朝絵巻双六。</p>
+            <p class="volume-card-rule"><strong>外周16帖＋善悪5帖ずつ</strong>：分岐マスで偶数は金色の「善道」、奇数は紫の「悪道」へ。物怪の引き戻しや追突合戦を抜けて絵合の大上りへ！</p>
             <div class="volume-card-footer">
-              <span>全15格 · 国貞風源氏絵</span>
+              <span>全27格 · 豊国・源氏絵合錦絵</span>
               <button type="button" class="volume-play-btn" data-play-board="3">この画帖で遊ぶ →</button>
             </div>
           </article>
         </div>
+      </div>
+    </div>
+
+    <!-- Custom Hand Card Selector Modal (自定义手札・初期Buff選択) -->
+    <div id="hand-card-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="自定义手札・初期Buff選択">
+      <div class="modal-panel hand-card-panel">
+        <div class="modal-header">
+          <div>
+            <h2 class="modal-title">🃏 懐中「自定义手札」・初期加護（Buff）選択</h2>
+            <p class="modal-subtitle" id="hand-modal-subtitle">蒐集済みの錦絵から1枚を懐中手札に選び、対局開始時の戦略初期Buffを発動させます。</p>
+          </div>
+          <button type="button" id="btn-hand-modal-close" class="modal-close-btn">✕ 閉じて対局へ</button>
+        </div>
+
+        <div class="hand-equipped-banner" id="hand-equipped-banner">
+          <div class="hand-equipped-left">
+            <span class="hand-equipped-seal" id="hand-equipped-seal">先</span>
+            <div>
+              <div class="hand-equipped-label">現在の懐中「自定义手札」</div>
+              <strong class="hand-equipped-title" id="hand-equipped-title">日本橋朝市 — 先駆出立の加護</strong>
+              <p class="hand-equipped-detail" id="hand-equipped-detail">対局開始時に振出から2格先（#2）より出立し、最初の賽振りでも+1歩加速する先手必勝の初期Buff。</p>
+            </div>
+          </div>
+          <div class="hand-equipped-actions">
+            <span class="hand-phase-pill" id="hand-phase-pill">開幕前・即時適用</span>
+            <button type="button" id="btn-hand-restart-apply" class="roll-cta-btn compact hidden">🔄 この手札で対局を最初から始める</button>
+          </div>
+        </div>
+
+        <div class="hand-filter-bar" role="tablist" aria-label="錦絵の巻で絞り込み">
+          <button type="button" class="hand-filter-btn active" data-hand-filter="all">すべて表示</button>
+          <button type="button" class="hand-filter-btn" data-hand-filter="0">巻ノ壱・東海道</button>
+          <button type="button" class="hand-filter-btn" data-hand-filter="1">巻ノ弐・百物語</button>
+          <button type="button" class="hand-filter-btn" data-hand-filter="2">巻ノ参・武将決集</button>
+          <button type="button" class="hand-filter-btn" data-hand-filter="3">巻ノ肆・源氏絵合</button>
+        </div>
+
+        <div id="hand-card-grid" class="hand-card-grid"></div>
       </div>
     </div>
 
@@ -247,8 +365,8 @@
 
           <div class="tutorial-step-card">
             <div class="step-num">参</div>
-            <h3>3. 特殊マスと三枚の懐中守り</h3>
-            <p><strong>「跳」</strong>マスは前方へ一気にジャンプ、<strong>「泊」</strong>マスは1回休みです。ただしあなたが携帯している三枚の護符（<strong>宿場守り・妖怪封じ・早駕籠</strong>）が不利な効果を自動的に打ち消し、初手を+1歩加速してくれます！</p>
+            <h3>3. 三枚の懐中護符と「自定义手札」初期Buff</h3>
+            <p>下部の懐中守札エリアには三枚の自動護符（<strong>宿場守り・妖怪封じ・早駕籠</strong>）に加え、対局開始前に蒐集した錦絵から1枚を選べる<strong>「自定义手札」スロット</strong>があります。選んだ錦絵に応じて開幕前進・追突強化・奇襲短縮などの初期Buffが発動します！</p>
           </div>
         </div>
 
@@ -264,8 +382,8 @@
       <div class="modal-panel gallery-panel">
         <div class="modal-header">
           <div>
-            <h2 class="modal-title">🖼️ 江戸浮世絵・三十六景錦絵図鑑</h2>
-            <p class="modal-subtitle" id="gallery-count-label">蒐集状況: 18 / 36 枚 開帳済み</p>
+            <h2 class="modal-title">🖼️ 江戸浮世絵・三十六景錦絵図鑑（自定义手札対応）</h2>
+            <p class="modal-subtitle" id="gallery-count-label">蒐集状況: 18 / 36 枚 開帳済み · 開帳済みの錦絵はクリックで「自定义手札（初期Buff）」に装備できます</p>
           </div>
           <button type="button" id="btn-gallery-close" class="modal-close-btn">✕ 閉じる</button>
         </div>

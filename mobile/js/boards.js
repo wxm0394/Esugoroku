@@ -1,4 +1,4 @@
-// 江戸浮世絵・絵双六 ── 四巻の摺物画帖と三十六枚の錦絵札。
+// 江戸浮世絵・絵双六 ── 四巻の大判摺物画帖（拡張24〜27格・攻防拉鋸版）と三十六枚の錦絵札。
 //
 // This module is deliberately free of DOM imports so the same data can be
 // consumed by the browser renderer and by Node's deterministic rules tests.
@@ -7,8 +7,8 @@ export const BOARD_W = 800;
 export const BOARD_H = 640;
 export const BOARD_RECT = { x: 190, y: 68, w: 800, h: 660 };
 
-const PAD = 8;
-const GAP = 9;
+const PAD = 6;
+const GAP = 5;
 const COLS = 5;
 const ROWS = 5;
 const CELL_W = (BOARD_W - PAD * 2 - GAP * (COLS - 1)) / COLS;
@@ -31,26 +31,17 @@ function cellRect(col, row, w = CELL_W, h = CELL_H, dx = 0, dy = 0) {
   };
 }
 
-// Board 1 / 2: the sixteen squares form a 5x5 ring.
-const RING_FROM_TOP_LEFT = [
+// 16 outer perimeter squares + 8 inner ring squares = 24 spiral squares + [2,2] center goal = 25 squares
+const SPIRAL_24_FROM_TOP_LEFT = [
+  // Outer ring (0..15)
   [0, 0], [1, 0], [2, 0], [3, 0], [4, 0],
   [4, 1], [4, 2], [4, 3], [4, 4],
   [3, 4], [2, 4], [1, 4], [0, 4],
   [0, 3], [0, 2], [0, 1],
-];
-
-// Board 4 starts at the lower-right and ends at the right-middle branch.
-const RING_FROM_BOTTOM_RIGHT = [
-  [4, 4], [3, 4], [2, 4], [1, 4], [0, 4],
-  [0, 3], [0, 2], [0, 1], [0, 0],
-  [1, 0], [2, 0], [3, 0], [4, 0],
-  [4, 1], [4, 2], [4, 3],
-];
-
-const INTERIOR_3X3 = [
+  // Inner ring (16..23)
   [1, 1], [2, 1], [3, 1],
-  [1, 2], [2, 2], [3, 2],
-  [1, 3], [2, 3], [3, 3],
+  [3, 2], [3, 3],
+  [2, 3], [1, 3], [1, 2],
 ];
 
 function ringNode(index, order, data) {
@@ -86,64 +77,60 @@ function chainNext(nodes, goalIndex) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 巻ノ壱 東海道・御府内名物道中双六                                   */
+/* 巻ノ壱 東海道五十三次・御府内名物道中双六（全25格・二重渦巻回廊）   */
 /* ------------------------------------------------------------------ */
 
 const TOKAIDO_NODES = [
-  ['日本橋', 'にほんばし', 'nihonbashi', 'start', '', 0, '旅の起点・日本橋'],
-  ['品川宿', 'しながわ', 'shinagawa', 'normal', '', 0, ''],
-  ['泥鰌鍋', 'どじょうなべ', 'dojo', 'jump', 0, 0, '名物・飛 +2'],
-  ['川崎宿', 'かわさき', 'kawasaki', 'normal', '', 0, ''],
-  ['鶴見泊', 'つるみ', 'tsurumi', 'stay', 0, 1, '泊 ─ 一休み'],
-  ['神奈川宿', 'かながわ', 'kanagawa', 'normal', '', 0, ''],
-  ['程ヶ谷宿', 'ほどがや', 'hodogaya', 'normal', '', 0, ''],
-  ['稲荷寿司', 'いなりずし', 'inari', 'jump', 0, 0, '名物・飛 +2'],
-  ['戸塚宿', 'とつか', 'totsuka', 'normal', '', 0, ''],
-  ['藤沢泊', 'ふじさわ', 'fujisawa', 'stay', 0, 1, '泊 ─ 一休み'],
-  ['平塚宿', 'ひらつか', 'hiratsuka', 'normal', '', 0, ''],
-  ['大磯宿', 'おおいそ', 'oiso', 'normal', '', 0, ''],
-  ['宇治茶', 'うじちゃ', 'tea', 'jump', 0, 0, '名物・飛 +3'],
-  ['小田原宿', 'おだわら', 'odawara', 'normal', '', 0, ''],
-  ['箱根宿', 'はこね', 'hakone', 'normal', '', 0, ''],
-  ['三島宿', 'みしま', 'mishima', 'normal', '', 0, ''],
+  // Outer Ring (#0..#15)
+  ['日本橋', 'にほんばし', 'nihonbashi', 'start', 0, 0, '旅の起点・日本橋'],
+  ['品川宿', 'しながわ', 'shinagawa', 'normal', 0, 0, '江戸湾の帆掛け舟'],
+  ['泥鰌鍋', 'どじょうなべ', 'dojo', 'jump', 2, 0, '名物・泥鰌鍋／飛 +2'],
+  ['川崎宿', 'かわさき', 'kawasaki', 'normal', 0, 0, '六郷の渡し舟'],
+  ['鶴見泊', 'つるみ', 'tsurumi', 'stay', 0, 1, '泊 ─ 茶屋で一休み'],
+  ['神奈川宿', 'かながわ', 'kanagawa', 'normal', 0, 0, '台町の海越し富士'],
+  ['程ヶ谷宿', 'ほどがや', 'hodogaya', 'normal', 0, 0, '帷子川の橋'],
+  ['稲荷寿司', 'いなりずし', 'inari', 'jump', 2, 0, '名物・稲荷寿司／飛 +2'],
+  ['戸塚宿', 'とつか', 'totsuka', 'normal', 0, 0, '吉田橋の立場'],
+  ['藤沢泊', 'ふじさわ', 'fujisawa', 'stay', 0, 1, '泊 ─ 遊行寺門前で一休み'],
+  ['平塚宿', 'ひらつか', 'hiratsuka', 'normal', 0, 0, '高麗山の縄手道'],
+  ['大磯宿', 'おおいそ', 'oiso', 'normal', 0, 0, '虎ヶ雨の浜辺'],
+  ['宇治茶', 'うじちゃ', 'tea', 'jump', 3, 0, '名物・宇治茶／飛 +3'],
+  ['小田原宿', 'おだわら', 'odawara', 'normal', 0, 0, '酒匂川の渡し'],
+  ['箱根関所', 'はこねせきしょ', 'hakone', 'jump', -2, 0, '関所改め ─ 手形確認で 2格戻る'],
+  ['三島宿', 'みしま', 'mishima', 'normal', 0, 0, '三島明神の朝霧'],
+  // Inner Ring (#16..#23) — High-stakes tug-of-war stretch
+  ['駿河丸子宿', 'まりこ', 'nihonbashi', 'jump', 2, 0, '名物・とろろ汁／飛 +2'],
+  ['大井川川止', 'おおいがわ', 'totsuka', 'stay', 0, 1, '泊 ─ 川止めで一休み'],
+  ['浜松宿', 'はままつ', 'hodogaya', 'normal', 0, 0, '颯々の松風'],
+  ['新居関所', 'あらいせきしょ', 'tsurumi', 'jump', -2, 0, '今切関所改め ─ 2格押し戻し'],
+  ['宮の渡し', 'みやのわたし', 'shinagawa', 'jump', 2, 0, '七里の渡し舟／飛 +2'],
+  ['桑名宿', 'くわな', 'kanagawa', 'normal', 0, 0, '焼き蛤の湊'],
+  ['鈴鹿峠悪風', 'すずかとうげ', 'hakone', 'jump', -3, 0, '峠の向かい風 ─ 3格吹き戻し'],
+  ['大津宿', 'おおつ', 'fujisawa', 'normal', 0, 0, '京目前の最終宿場'],
 ];
 
 const tokaidoNodes = TOKAIDO_NODES.map((row, i) => {
-  const [title, reading, art, kind, jump, stayTurns, rule] = row;
-  const node = ringNode(i, RING_FROM_TOP_LEFT, {
+  const [title, reading, art, kind, jumpDelta, stayTurns, rule] = row;
+  const node = ringNode(i, SPIRAL_24_FROM_TOP_LEFT, {
     id: i,
     title,
     reading,
     art,
     kind,
-    seal: kind === 'start' ? '出' : kind === 'stay' ? '泊' : kind === 'jump' ? '飛' : String(i).padStart(2, '0'),
+    jumpDelta,
+    seal: kind === 'start' ? '出' : kind === 'stay' ? '泊' : kind === 'jump' ? (jumpDelta > 0 ? '飛' : '関') : String(i).padStart(2, '0'),
     stayTurns,
-    jumpTable: kind === 'jump' ? [2, 2, 2, 2, 2, i === 12 ? 3 : 2] : [0, 0, 0, 0, 0, 0],
+    jumpTable: kind === 'jump' ? [jumpDelta, jumpDelta, jumpDelta, jumpDelta, jumpDelta, jumpDelta] : [0, 0, 0, 0, 0, 0],
     tokens: 0,
     rule: rule || '宿場を進む',
     komae: i % 3,
     palette: i % 3,
   });
-  if (i === 2) {
-    node.title = '泥鰌鍋';
-    node.jumpTable = [2, 2, 2, 2, 2, 2];
-    node.rule = '名物・泥鰌鍋／飛 +2';
-  }
-  if (i === 7) {
-    node.title = '稲荷寿司';
-    node.jumpTable = [2, 2, 2, 2, 2, 2];
-    node.rule = '名物・稲荷寿司／飛 +2';
-  }
-  if (i === 12) {
-    node.title = '宇治茶';
-    node.jumpTable = [3, 3, 3, 3, 3, 3];
-    node.rule = '名物・宇治茶／飛 +3';
-  }
   return node;
 });
 
 const tokaidoGoal = {
-  id: 16,
+  id: 24,
   title: '京都・八百善大上り',
   reading: 'きょうと やおぜん おおあがり',
   art: 'kyoto',
@@ -152,8 +139,8 @@ const tokaidoGoal = {
   stayTurns: 0,
   jumpTable: [0, 0, 0, 0, 0, 0],
   tokens: 0,
-  rule: '点数ぴったりで入上り／超過は戻る',
-  ...cellRect(1, 1, CELL_W * 3 + GAP * 2, CELL_H * 3 + GAP * 2),
+  rule: '点数ぴったりで入上り／超過は折り返し・同格追突で相手を2格弾く',
+  ...cellRect(2, 2, CELL_W, CELL_H),
   palette: 0,
 };
 
@@ -162,7 +149,7 @@ const tokaido = {
   volume: '巻ノ壱',
   volumeKanji: '壱',
   style: 'mawari',
-  styleLabel: '廻り双六',
+  styleLabel: '二重廻り双六',
   title: '東海道・御府内名物道中双六',
   shortTitle: '東海道名物道中',
   artists: '歌川広重・芳艶・渓斎英泉 風',
@@ -171,14 +158,15 @@ const tokaido = {
   accent: '#b23a2b',
   accent2: '#1f5c61',
   start: 0,
-  goal: 16,
+  goal: 24,
+  clashPush: 2,
   bounceBack: true,
   requiredTokens: 0,
-  maxTurns: 96,
-  nodes: chainNext([...tokaidoNodes, tokaidoGoal], 16),
+  maxTurns: 120,
+  nodes: chainNext([...tokaidoNodes, tokaidoGoal], 24),
   cardIds: ['tokaido_01', 'tokaido_02', 'tokaido_03', 'tokaido_04', 'tokaido_05', 'tokaido_06', 'tokaido_07', 'tokaido_08', 'tokaido_09'],
-  blurb: '五十三次の宿場と名物を巡り、最後は京・八百善へ。',
-  ruleSummary: '時計回りに進み、紅丸「泊」は一休み。名物格は飛び、上がりは点点一致。',
+  blurb: '外周十六宿から内周八宿へ渦巻く全二十五格。名物跳び・関所押し戻し・追突合戦を制して京・八百善へ。',
+  ruleSummary: '時計回りに外周→内周へ進み、泊は一休み、関所は押し戻し。同じ格に止まると追突で相手を2格弾き飛ばす！',
   layout: 'spiral-corridor',
   shape: 'arrow-strip',
   ui: {
@@ -193,48 +181,49 @@ const tokaido = {
 };
 
 /* ------------------------------------------------------------------ */
-/* 巻ノ弐 百種怪談・妖物飛び双六                                       */
+/* 巻ノ弐 百種怪談・妖物飛び双六（全25格・百物語大迷宮組絵）           */
 /* ------------------------------------------------------------------ */
 
 const YOKAI = [
-  ['河童', 'かっぱ', 'kappa', [3, 3, 3, 1, 1, -3], '【一〜三】三ます先へ飛 【四・五】一ます進む 【六】三ます戻る'],
-  ['雪女郎', 'ゆきじょろう', 'yukionna', [2, 2, 2, 0, 0, -2], '【一・二】二ます先へ飛 【三〜五】止 【六】二ます戻る'],
-  ['猫俣', 'ねこまた', 'nekomata', [2, 2, 2, 2, 0, 0], '【一〜四】二ます先へ飛 【五・六】止'],
-  ['文福茶釜', 'ぶんぶくちゃがま', 'chagama', [1, 1, 1, 0, 0, 0], '【一〜三】一ます先へ飛 【四〜六】止'],
-  ['三目大僧', 'みつめだいそう', 'sanme', [-1, -1, 2, 2, 4, 4], '【一・二】一ます戻る 【三・四】二ます先へ飛 【五・六】四ます先へ飛'],
-  ['船幽霊', 'ふなゆうれい', 'funayurei', [-2, 0, 0, 2, 2, 2], '【一】二ます戻る 【二・三】止 【四〜六】二ます先へ飛'],
-  ['挑灯お岩', 'ちょうちんおいわ', 'oiwa', [-3, -3, 0, 0, 2, 2], '【一・二】三ます戻る 【三・四】止 【五・六】二ます先へ飛'],
-  ['ろくろ首', 'ろくろくび', 'rokuro', [4, 4, 2, 2, 0, 0], '【一・二】四ます先へ飛 【三・四】二ます先へ飛 【五・六】止'],
-  ['九尾狐', 'きゅうびのきつね', 'kyubi', [1, 2, 3, 2, 1, 0], '【一】一ます 【二】二ます 【三】三ます 【四】二ます 【五】一ます 【六】止'],
-  ['手の目', 'てのめ', 'tenome', [0, 0, -1, -1, -3, -3], '【一・二】止 【三・四】一ます戻る 【五・六】三ます戻る'],
-  ['一反木綿', 'いったんもめん', 'ittan', [2, 2, 0, 0, -2, -2], '【一・二】二ます先へ飛 【三・四】止 【五・六】二ます戻る'],
-  ['朱の盤', 'しゅのばん', 'shuban', [3, 0, 0, 1, 1, 3], '【一】三ます先へ飛 【二・三】止 【四・五】一ます進む 【六】三ます先へ飛'],
-  ['大天狗', 'おおてんぐ', 'tengu', [4, 3, 2, 1, 0, -1], '【一】四ます先へ飛 【二】三ます 【三】二ます 【四】一ます 【五】止 【六】一ます戻る'],
-  ['見越入道', 'みこしにゅうどう', 'mikoshi', [2, 2, 2, -2, -2, -2], '【一〜三】二ます先へ飛 【四〜六】二ます戻る'],
-  ['濡女', 'ぬれおんな', 'nureonna', [-3, -2, -1, 0, 1, 2], '【一】三ます戻る 【二】二ます戻る 【三】一ます戻る 【四】止 【五】一ます 【六】二ます'],
-  ['鉄鼠', 'てっそ', 'tesshi', [1, 1, 0, 0, -1, -1], '【一・二】一ます進む 【三・四】止 【五・六】一ます戻る'],
+  ['河童', 'かっぱ', 'kappa', [3, 3, 3, 1, 1, -3], '【一〜三】+3飛 【四・五】+1進 【六】-3戻'],
+  ['雪女郎', 'ゆきじょろう', 'yukionna', [2, 2, 2, 0, 0, -2], '【一〜三】+2飛 【四・五】止 【六】-2戻'],
+  ['猫俣', 'ねこまた', 'nekomata', [2, 2, 2, 2, 0, -2], '【一〜四】+2飛 【五】止 【六】-2戻'],
+  ['文福茶釜', 'ぶんぶくちゃがま', 'chagama', [1, 1, 1, 0, 0, 0], '【一〜三】+1飛 【四〜六】止'],
+  ['三目大僧', 'みつめだいそう', 'sanme', [-1, -1, 2, 2, 4, 4], '【一・二】-1戻 【三・四】+2飛 【五・六】+4飛'],
+  ['船幽霊', 'ふなゆうれい', 'funayurei', [-2, 0, 0, 2, 2, 2], '【一】-2戻 【二・三】止 【四〜六】+2飛'],
+  ['挑灯お岩', 'ちょうちんおいわ', 'oiwa', [-3, -3, 0, 0, 2, 2], '【一・二】-3戻 【三・四】止 【五・六】+2飛'],
+  ['ろくろ首', 'ろくろくび', 'rokuro', [4, 4, 2, 2, 0, -2], '【一・二】+4飛 【三・四】+2飛 【五】止 【六】-2戻'],
+  ['九尾狐', 'きゅうびのきつね', 'kyubi', [1, 2, 3, 2, 1, -3], '【一〜五】+1〜+3進 【六】妖狐の祟り-3戻'],
+  ['手の目', 'てのめ', 'tenome', [0, 0, -1, -1, -3, -3], '【一・二】止 【三・四】-1戻 【五・六】-3戻'],
+  ['一反木綿', 'いったんもめん', 'ittan', [2, 2, 0, 0, -2, -2], '【一・二】+2飛 【三・四】止 【五・六】-2戻'],
+  ['朱の盤', 'しゅのばん', 'shuban', [3, 0, 0, 1, 1, -3], '【一】+3飛 【二・三】止 【四・五】+1進 【六】-3戻'],
+  ['大天狗', 'おおてんぐ', 'tengu', [4, 3, 2, 1, 0, -2], '【一】+4飛 【二】+3 【三】+2 【四】+1 【六】-2戻'],
+  ['見越入道', 'みこしにゅうどう', 'mikoshi', [2, 2, 2, -2, -2, -2], '【一〜三】+2飛 【四〜六】-2戻'],
+  ['濡女', 'ぬれおんな', 'nureonna', [-3, -2, -1, 0, 1, 2], '【一〜三】-3〜-1戻 【四】止 【五・六】+1〜+2進'],
+  ['鉄鼠', 'てっそ', 'tesshi', [1, 1, 0, 0, -1, -2], '【一・二】+1進 【三・四】止 【五・六】-1〜-2戻'],
+  // Inner 8 High-Stakes Apparition Squares (#16..#23)
+  ['皿屋敷お菊', 'おきく', 'oiwa', [2, 2, -2, -2, -4, 3], '【一・二】+2飛 【三・四】-2戻 【五】-4奈落 【六】+3飛'],
+  ['がしゃどくろ', 'がしゃどくろ', 'sanme', [-3, -3, 2, 2, 3, 0], '【一・二】-3戻 【三・四】+2飛 【五】+3飛 【六】止'],
+  ['ぬらりひょん', 'ぬらりひょん', 'mikoshi', [0, 0, 2, 2, -2, -3], '【一・二】座敷居座り止 【三・四】+2飛 【五・六】-2〜-3戻'],
+  ['絡新婦', 'じょろうぐも', 'yukionna', [-2, -2, -3, 2, 2, 3], '【一〜三】蜘蛛の巣-2〜-3戻 【四〜六】+2〜+3飛'],
+  ['天邪鬼', 'あまのじゃく', 'tengu', [-3, -2, -1, 1, 2, 3], '【一〜三】逆風-3〜-1戻 【四〜六】順風+1〜+3飛'],
+  ['百目鬼', 'どうめき', 'tenome', [2, 2, 0, -2, -3, -4], '【一・二】+2飛 【三】止 【四〜六】凝視-2〜-4戻'],
+  ['陰摩羅鬼', 'おんもらき', 'funayurei', [2, 1, 0, -1, -2, -3], '【一・二】+2〜+1進 【三】止 【四〜六】怪鳥-1〜-3戻'],
+  ['逢魔が時', 'おうまがとき', 'kyubi', [1, 0, 0, -2, -3, -4], '【一】大団円へ+1進 【二・三】止 【四〜六】逢魔が時-2〜-4戻'],
 ];
 
-// Deliberately irregular collage: four large yokai prints interlock with
-// twelve smaller prints.  The centre is reserved for the hundred-tale goal.
-const YOKAI_COLLAGE = [
-  { x: 4, y: 4, w: 190, h: 146, big: true },
-  { x: 202, y: 25, w: 136, h: 96, big: false },
-  { x: 346, y: 4, w: 190, h: 146, big: true },
-  { x: 544, y: 25, w: 130, h: 96, big: false },
-  { x: 680, y: 25, w: 116, h: 96, big: false },
-  { x: 4, y: 158, w: 136, h: 100, big: false },
-  { x: 4, y: 266, w: 136, h: 100, big: false },
-  { x: 4, y: 374, w: 190, h: 122, big: true },
-  { x: 660, y: 158, w: 136, h: 100, big: false },
-  { x: 660, y: 266, w: 136, h: 100, big: false },
-  { x: 606, y: 374, w: 190, h: 122, big: true },
-  { x: 4, y: 506, w: 190, h: 130, big: true },
-  { x: 202, y: 538, w: 136, h: 96, big: false },
-  { x: 346, y: 506, w: 190, h: 130, big: true },
-  { x: 544, y: 538, w: 130, h: 96, big: false },
-  { x: 680, y: 538, w: 116, h: 96, big: false },
-];
+// 24 interlocking large and small prints arranged around the 5x5 spiral so every print is large and legible
+const YOKAI_COLLAGE = SPIRAL_24_FROM_TOP_LEFT.map(([col, row], i) => {
+  const isBig = i % 3 === 0;
+  const base = cellRect(col, row);
+  return {
+    x: base.x + (isBig ? -4 : 6),
+    y: base.y + (isBig ? -4 : 6),
+    w: isBig ? base.w + 8 : base.w - 20,
+    h: isBig ? base.h + 8 : base.h - 20,
+    big: isBig,
+  };
+});
 
 const yokaiNodes = YOKAI.map((row, i) => {
   const [title, reading, art, jumpTable, jumpText] = row;
@@ -259,7 +248,7 @@ const yokaiNodes = YOKAI.map((row, i) => {
 });
 
 const yokaiGoal = {
-  id: 16,
+  id: 24,
   title: '百物語大団円・上り',
   reading: 'ひゃくものがたり だいだんえん',
   art: 'hyakumonogatari',
@@ -267,10 +256,10 @@ const yokaiGoal = {
   seal: '上',
   stayTurns: 0,
   jumpTable: [0, 0, 0, 0, 0, 0],
-  jumpText: '妖怪札をすべて乗り越え、大団円へ。',
+  jumpText: '二十四の怪異をすべて乗り越え、大団円へ。',
   tokens: 0,
   rule: '百物語の灯を消さず、大団円へ上がる',
-  x: 236, y: 236, w: 328, h: 210,
+  ...cellRect(2, 2, CELL_W + 6, CELL_H + 6, -3, -3),
   palette: 3,
 };
 
@@ -279,7 +268,7 @@ const yokai = {
   volume: '巻ノ弐',
   volumeKanji: '弐',
   style: 'tobi',
-  styleLabel: '飛び双六',
+  styleLabel: '大迷宮・飛び双六',
   title: '百種怪談・妖物飛び双六',
   shortTitle: '百種怪談妖物',
   artists: '歌川芳員 1858『百種怪談妖物双六』風',
@@ -288,14 +277,15 @@ const yokai = {
   accent: '#7d1f31',
   accent2: '#305b60',
   start: 0,
-  goal: 16,
+  goal: 24,
+  clashPush: 2,
   bounceBack: false,
   requiredTokens: 0,
-  maxTurns: 120,
-  nodes: chainNext([...yokaiNodes, yokaiGoal], 16),
+  maxTurns: 140,
+  nodes: chainNext([...yokaiNodes, yokaiGoal], 24),
   cardIds: ['yokai_01', 'yokai_02', 'yokai_03', 'yokai_04', 'yokai_05', 'yokai_06', 'yokai_07', 'yokai_08', 'yokai_09'],
-  blurb: '夜行灯の百物語。妖怪札の短冊に記された一〜六の行き先に従う。',
-  ruleSummary: '妖怪格に止まったら、出目1〜6の短冊を読み、そのまま飛ぶ。',
+  blurb: '全二十五格の百鬼夜行大迷宮。出目1〜6の飛び先と逆戻り怪異、青行灯全滅の倍跳びで激しい逆転劇が展開する。',
+  ruleSummary: '妖怪格に止まったら出目1〜6の短冊に従って前進・後退。青行灯消滅で飛距離2倍、同格追突で相手を2格弾く！',
   layout: 'irregular-collage',
   shape: 'collage',
   ui: {
@@ -310,74 +300,99 @@ const yokai = {
 };
 
 /* ------------------------------------------------------------------ */
-/* 巻ノ参 英勇揃伊呂波・誠忠義士双六                                   */
+/* 巻ノ参 英勇揃伊呂波・誠忠義士双六（全24格・源平合戦攻防陣）         */
 /* ------------------------------------------------------------------ */
 
-const IROHA = ['い', 'ろ', 'は', 'に', 'ほ', 'へ', 'と', 'ち', 'り', 'ぬ', 'る', 'を', 'わ', 'か', 'よ', 'た'];
-const KESSHU_TITLES = [
-  ['出陣', 'しゅつじん', 'shutsujin', 'start'],
-  ['槍隊', 'やりたい', 'yari', 'normal'],
-  ['弓隊', 'ゆみたい', 'yumi', 'normal'],
-  ['兜', 'かぶと', 'kabuto', 'token'],
-  ['軍議', 'ぐんぎ', 'gungi', 'normal'],
-  ['大鎧', 'おおよろい', 'oyoroi', 'normal'],
-  ['一騎討', 'いっきうち', 'ikkit', 'normal'],
-  ['太刀', 'たち', 'tachi', 'token'],
-  ['義士盟約', 'ぎしめいやく', 'meiyaku', 'normal'],
-  ['忍び', 'しのび', 'shinobi', 'normal'],
-  ['敵陣', 'てきじん', 'tekijin', 'normal'],
-  ['陣太鼓', 'じんだいこ', 'jindaiko', 'token'],
-  ['決死', 'けっし', 'kesshi', 'normal'],
-  ['勝鬨', 'かちどき', 'kachidoki', 'normal'],
-  ['上り前', 'あがりまえ', 'agarimae', 'normal'],
-  ['上り', 'あがり', 'agari', 'goal'],
+const IROHA = [
+  'い', 'ろ', 'は', 'に', 'ほ', 'へ', 'と', 'ち',
+  'り', 'ぬ', 'る', 'を', 'わ', 'か', 'よ', 'た',
+  'れ', 'そ', 'つ', 'ね', 'な', 'ら', 'む', 'う',
 ];
 
-// A deliberately asymmetric 1:1 print-board composition.  The lower-right
-// "出陣" and upper-left "上り" are large army cards; the other fourteen
-// warrior cards are tilted like a scattered hand of karuta.
-const KESSHU_RECTS = [
-  { x: 550, y: 460, w: 245, h: 175 },
-  { x: 355, y: 515, w: 170, h: 120 },
-  { x: 180, y: 515, w: 170, h: 120 },
-  { x: 5, y: 515, w: 170, h: 120 },
-  { x: 5, y: 335, w: 170, h: 120 },
-  { x: 5, y: 200, w: 170, h: 120 },
-  { x: 200, y: 300, w: 170, h: 120 },
-  { x: 380, y: 300, w: 170, h: 120 },
-  { x: 614, y: 265, w: 170, h: 120 },
-  { x: 614, y: 135, w: 170, h: 120 },
-  { x: 436, y: 135, w: 170, h: 120 },
-  { x: 258, y: 135, w: 170, h: 120 },
-  { x: 614, y: 5, w: 170, h: 120 },
-  { x: 436, y: 5, w: 170, h: 120 },
-  { x: 258, y: 5, w: 170, h: 120 },
-  { x: 5, y: 5, w: 245, h: 175 },
+const KESSHU_TITLES = [
+  ['出陣', 'しゅつじん', 'shutsujin', 'start', 0, 0, '源平合戦・本陣より出陣'],
+  ['槍隊', 'やりたい', 'yari', 'normal', 0, 0, '長柄槍の先鋒隊'],
+  ['弓隊', 'ゆみたい', 'yumi', 'normal', 0, 0, '梓弓の斉射陣'],
+  ['兜', 'かぶと', 'kabuto', 'token', 0, 0, '討入備え「兜」を得る'],
+  ['軍議', 'ぐんぎ', 'gungi', 'normal', 0, 0, '本陣の軍配団扇'],
+  ['大鎧', 'おおよろい', 'oyoroi', 'jump', 2, 0, '赤糸威の突撃／飛 +2'],
+  ['一騎討', 'いっきうち', 'ikkit', 'normal', 0, 0, '五条大橋の一騎討'],
+  ['太刀', 'たち', 'tachi', 'token', 0, 0, '討入備え「太刀」を得る'],
+  ['伏兵奇襲', 'ふくへい', 'shinobi', 'jump', -2, 0, '敵伏兵の奇襲 ─ 2格退却'],
+  ['義士盟約', 'ぎしめいやく', 'meiyaku', 'normal', 0, 0, '連判状の血判'],
+  ['陣太鼓', 'じんだいこ', 'jindaiko', 'token', 0, 0, '討入備え「陣太鼓」を得る'],
+  ['兵糧攻め', 'ひょうろう', 'tekijin', 'stay', 0, 1, '泊 ─ 兵糧補給で一休み'],
+  ['早馬伝令', 'はやうま', 'yukimura', 'jump', 2, 0, '早馬の急報／飛 +2'],
+  ['敵陣鉄砲', 'てっぽうたい', 'tekijin', 'jump', -3, 0, '鉄砲隊の弾幕 ─ 3格押し戻し'],
+  ['忍び間者', 'しのび', 'shinobi', 'normal', 0, 0, '夜陰の城壁潜入'],
+  ['予備兜陣', 'よびかぶと', 'kabuto', 'token', 0, 0, '討入備え「兜」を得る（予備陣）'],
+  ['予備太刀陣', 'よびたち', 'tachi', 'token', 0, 0, '討入備え「太刀」を得る（予備陣）'],
+  ['城門突破', 'じょうもん', 'masashige', 'jump', 2, 0, '大槌で城門突破／飛 +2'],
+  ['予備太鼓陣', 'よびたいこ', 'jindaiko', 'token', 0, 0, '討入備え「陣太鼓」を得る（予備陣）'],
+  ['本陣守備隊', 'ほんじん', 'benkei', 'stay', 0, 1, '泊 ─ 弁慶の立往生で一休み'],
+  ['決死突撃', 'けっし', 'kesshi', 'normal', 0, 0, '白旗の決死行'],
+  ['御前関門', 'ごぜんかんもん', 'agarimae', 'jump', -2, 0, '御前親衛隊 ─ 2格押し戻し'],
+  ['上り前', 'あがりまえ', 'kachidoki', 'normal', 0, 0, '勝鬨を上げて御前へ'],
+  ['上り', 'あがり', 'agari', 'goal', 0, 0, '三備えを揃えて御前大上り'],
 ];
-const KESSHU_TILTS = [-7, -4, 2, 6, 9, -2, 4, -6, 1, 7, -3, 5, -5, 8, 0, -1];
+
+// 24 cards arranged in a serpentine 4-row battlefield:
+// #0 (bottom-right army card 245x165) -> row 3 -> row 2 -> row 1 -> row 0 -> #23 (top-left army card 245x165)
+const KESSHU_RECTS = [
+  // Row 3 (bottom, right to left): #0 is large start card, then #1..#4
+  { x: 548, y: 462, w: 245, h: 172 }, // #0 出陣
+  { x: 408, y: 492, w: 132, h: 134 }, // #1
+  { x: 274, y: 492, w: 130, h: 134 }, // #2
+  { x: 140, y: 492, w: 130, h: 134 }, // #3 兜
+  { x: 6,   y: 492, w: 130, h: 134 }, // #4
+  // Row 2 (left to right): #5..#10
+  { x: 6,   y: 336, w: 128, h: 136 }, // #5
+  { x: 138, y: 336, w: 128, h: 136 }, // #6
+  { x: 270, y: 336, w: 128, h: 136 }, // #7 太刀
+  { x: 402, y: 336, w: 128, h: 136 }, // #8
+  { x: 534, y: 336, w: 128, h: 136 }, // #9
+  { x: 666, y: 316, w: 128, h: 136 }, // #10 陣太鼓
+  // Row 1 (right to left): #11..#17
+  { x: 666, y: 170, w: 128, h: 134 }, // #11
+  { x: 534, y: 178, w: 128, h: 134 }, // #12
+  { x: 402, y: 178, w: 128, h: 134 }, // #13
+  { x: 270, y: 178, w: 128, h: 134 }, // #14
+  { x: 138, y: 184, w: 128, h: 134 }, // #15
+  { x: 6,   y: 184, w: 128, h: 134 }, // #16
+  // Row 0 (top row y=12, 6 warrior cards #17..#22 leading into #23 top-left Goal):
+  { x: 704, y: 12,  w: 88,  h: 150 }, // #17 城門突破
+  { x: 614, y: 12,  w: 86,  h: 150 }, // #18 予備太鼓陣
+  { x: 524, y: 12,  w: 86,  h: 150 }, // #19 本陣守備隊
+  { x: 434, y: 12,  w: 86,  h: 150 }, // #20 決死突撃
+  { x: 344, y: 12,  w: 86,  h: 150 }, // #21 御前関門
+  { x: 254, y: 12,  w: 86,  h: 150 }, // #22 上り前
+  { x: 6,   y: 6,   w: 244, h: 172 }, // #23 上り (upper-left large card)
+];
+
+const KESSHU_TILTS = [
+  -6, -4, 2, 6, 8, -3, 4, -6, 2, 7, -4, 5,
+  -5, 8, -2, 3, -7, 6, -3, 5, -4, 7, 1, -1,
+];
 
 const kesshuNodes = KESSHU_TITLES.map((row, i) => {
-  const [title, reading, art, kind] = row;
-  const tokenBits = kind === 'token'
-    ? (title === '兜' ? 1 : title === '太刀' ? 2 : 4)
-    : 0;
+  const [title, reading, art, kind, jumpDelta, stayTurns, customRule] = row;
+  const isHelm = title.includes('兜');
+  const isSword = title.includes('太刀');
+  const tokenBits = kind === 'token' ? (isHelm ? 1 : isSword ? 2 : 4) : 0;
+  const tokenName = isHelm ? '兜' : isSword ? '太刀' : kind === 'token' ? '陣太鼓' : '';
   return {
     id: i,
     title,
     reading,
     art,
     kind,
-    seal: kind === 'goal' ? '上' : kind === 'token' ? '備' : IROHA[i],
+    seal: kind === 'goal' ? '上' : kind === 'token' ? '備' : kind === 'stay' ? '泊' : kind === 'jump' ? (jumpDelta > 0 ? '突' : '奇') : IROHA[i],
     iroha: IROHA[i],
-    stayTurns: 0,
-    jumpTable: [0, 0, 0, 0, 0, 0],
+    stayTurns: stayTurns || 0,
+    jumpTable: jumpDelta ? [jumpDelta, jumpDelta, jumpDelta, jumpDelta, jumpDelta, jumpDelta] : [0, 0, 0, 0, 0, 0],
     tokens: tokenBits,
-    tokenLabel: kind === 'token' ? title : '',
-    rule: kind === 'goal'
-      ? '兜・太刀・陣太鼓の三備えを揃えて上る'
-      : kind === 'token'
-        ? `討入備え「${title}」を得る`
-        : '武者牌を進む',
+    tokenLabel: tokenName,
+    rule: customRule,
     ...KESSHU_RECTS[i],
     tilt: (KESSHU_TILTS[i] * Math.PI) / 180,
     palette: i % 4,
@@ -389,7 +404,7 @@ const kesshu = {
   volume: '巻ノ参',
   volumeKanji: '参',
   style: 'kesshu',
-  styleLabel: '備え・集結双六',
+  styleLabel: '合戦・備え集結双六',
   title: '英勇揃伊呂波・誠忠義士双六',
   shortTitle: '英勇揃伊呂波',
   artists: '歌川芳虎『英勇揃伊呂波双六』・『源平ふりわけ双六』風',
@@ -398,14 +413,16 @@ const kesshu = {
   accent: '#9a2924',
   accent2: '#3c5d45',
   start: 0,
-  goal: 15,
+  goal: 23,
+  clashPush: 3,
+  stealTokenOnDuel: true,
   bounceBack: false,
   requiredTokens: 3,
-  maxTurns: 120,
-  nodes: chainNext(kesshuNodes, 15),
+  maxTurns: 150,
+  nodes: chainNext(kesshuNodes, 23),
   cardIds: ['kesshu_01', 'kesshu_02', 'kesshu_03', 'kesshu_04', 'kesshu_05', 'kesshu_06', 'kesshu_07', 'kesshu_08', 'kesshu_09'],
-  blurb: '伊呂波の武者牌を集め、兜・太刀・陣太鼓の三備えを揃えて上る。',
-  ruleSummary: '討入備え三枚を集めよ。未集結で上りへ入ると御前に弾き返される。',
+  blurb: '全二十四格の合戦陣。三備え（兜・太刀・陣太鼓）を集め、一騎討ちで相手を3格弾き飛ばし＆武具奪取を狙う白熱の攻防戦！',
+  ruleSummary: '三備えを揃えて上りへ。同じ格で一騎討ちになると相手を3格弾き飛ばし、相手が持つ未所持の武具印を1つ奪取する！',
   layout: 'tilted-warrior-cards',
   shape: 'warrior-card',
   ui: {
@@ -420,7 +437,7 @@ const kesshu = {
 };
 
 /* ------------------------------------------------------------------ */
-/* 巻ノ肆 善悪道中・源氏絵合出世双六                                   */
+/* 巻ノ肆 善悪道中・源氏絵合出世双六（全27格・善悪二道長編絵巻）       */
 /* ------------------------------------------------------------------ */
 
 const GENJI_OUTER = [
@@ -442,23 +459,21 @@ const GENJI_OUTER = [
   ['関屋', 'せきや', 'sekiya'],
 ];
 
-// 16 narrow vertical strips hug the four edges.  The bottom-right is the
-// start; the right-middle strip is the good/evil fork.
 const GENJI_STRIP_RECTS = [
   { x: 705, y: 506, w: 70, h: 126 },
   { x: 580, y: 506, w: 70, h: 126 },
   { x: 455, y: 506, w: 70, h: 126 },
   { x: 330, y: 506, w: 70, h: 126 },
   { x: 205, y: 506, w: 70, h: 126 },
-  { x: 80, y: 506, w: 70, h: 126 },
-  { x: 8, y: 310, w: 70, h: 126 },
-  { x: 8, y: 170, w: 70, h: 126 },
-  { x: 80, y: 8, w: 70, h: 126 },
-  { x: 205, y: 8, w: 70, h: 126 },
-  { x: 330, y: 8, w: 70, h: 126 },
-  { x: 455, y: 8, w: 70, h: 126 },
-  { x: 580, y: 8, w: 70, h: 126 },
-  { x: 705, y: 8, w: 70, h: 126 },
+  { x: 80,  y: 506, w: 70, h: 126 },
+  { x: 8,   y: 310, w: 70, h: 126 },
+  { x: 8,   y: 170, w: 70, h: 126 },
+  { x: 80,  y: 8,   w: 70, h: 126 },
+  { x: 205, y: 8,   w: 70, h: 126 },
+  { x: 330, y: 8,   w: 70, h: 126 },
+  { x: 455, y: 8,   w: 70, h: 126 },
+  { x: 580, y: 8,   w: 70, h: 126 },
+  { x: 705, y: 8,   w: 70, h: 126 },
   { x: 722, y: 170, w: 70, h: 126 },
   { x: 722, y: 310, w: 70, h: 126 },
 ];
@@ -466,17 +481,28 @@ const GENJI_BERO = ['#5383a6', '#e8b954', '#e09879', '#b8b6a8'];
 
 const genjiOuterNodes = GENJI_OUTER.map((row, i) => {
   const [title, reading, art] = row;
+  const isStay = i === 5 || i === 11; // 末摘花 & 須磨謫居
+  const isJump = i === 4 || i === 12; // 若紫 (+2) & 明石 (+2)
+  const isTrap = i === 8 || i === 14; // 葵車争い (-2) & 蓬生荒廃 (-2)
   return {
     id: i,
     title,
     reading,
     art,
-    kind: i === 0 ? 'start' : i === 15 ? 'branch' : 'normal',
-    seal: String(i + 1).padStart(2, '0'),
-    stayTurns: 0,
-    jumpTable: [0, 0, 0, 0, 0, 0],
+    kind: i === 0 ? 'start' : i === 15 ? 'branch' : isStay ? 'stay' : (isJump || isTrap) ? 'jump' : 'normal',
+    seal: i === 15 ? '岐' : isStay ? '泊' : isJump ? '飛' : isTrap ? '祟' : String(i + 1).padStart(2, '0'),
+    stayTurns: isStay ? 1 : 0,
+    jumpTable: isJump ? [2, 2, 2, 2, 2, 2] : isTrap ? [-2, -2, -2, -2, -2, -2] : [0, 0, 0, 0, 0, 0],
     tokens: 0,
-    rule: i === 15 ? '善悪の分かれ道 ─ 偶は善道、奇は悪道' : '源氏物語の短冊を進む',
+    rule: i === 15
+      ? '善悪の分かれ道 ─ 偶数は善道、奇数は悪道へ分岐'
+      : isStay
+        ? `泊 ─ ${title}の宿で一休み`
+        : isJump
+          ? `雅の追い風 ─ 2格進む`
+          : isTrap
+            ? `物怪の障り ─ 2格引き戻される`
+            : '源氏物語の短冊を進む',
     ...GENJI_STRIP_RECTS[i],
     color: GENJI_BERO[i % 4],
     palette: i % 4,
@@ -485,12 +511,15 @@ const genjiOuterNodes = GENJI_OUTER.map((row, i) => {
   };
 });
 
+// 5 Golden Good Track squares (#16..#20)
 const goodNodes = [
-  ['絵合', 'えあわせ', 'eawase'],
-  ['松風', 'まつかぜ', 'matsukaze'],
-  ['薄雲', 'うすぐも', 'usugumo'],
+  ['絵合', 'えあわせ', 'eawase', [2, 2, 2, 2, 2, 2], 0, '善玉出世道 ─ 連跳 +2'],
+  ['松風', 'まつかぜ', 'matsukaze', [0, 0, 0, 0, 0, 0], 0, '善玉出世道 ─ 琴の追い風'],
+  ['薄雲', 'うすぐも', 'usugumo', [0, 0, 0, 0, 0, 0], 0, '善玉出世道 ─ 春の御殿'],
+  ['初音', 'はつね', 'hikaru', [1, 1, 1, 0, 0, -2], 0, '善玉試練 ─ 六の目は慢心で2格戻る'],
+  ['胡蝶', 'こちょう', 'murasaki', [0, 0, 0, 0, 0, 0], 0, '善玉出世道 ─ 龍頭鷁首の船楽'],
 ].map((row, i) => {
-  const [title, reading, art] = row;
+  const [title, reading, art, jumpTable, stayTurns, rule] = row;
   return {
     id: 16 + i,
     title,
@@ -498,43 +527,52 @@ const goodNodes = [
     art,
     kind: 'good',
     seal: '善',
-    stayTurns: 0,
-    jumpTable: i === 0 ? [2, 2, 2, 2, 2, 2] : [0, 0, 0, 0, 0, 0],
+    stayTurns,
+    jumpTable,
     tokens: 0,
-    rule: i === 0 ? '善玉出世道 ─ 連跳 +2' : '善玉出世道 ─ 追い風',
-    x: [520, 375, 230][i], y: 170, w: 130, h: 92,
+    rule,
+    x: [596, 480, 364, 248, 132][i],
+    y: 162,
+    w: 108,
+    h: 98,
     color: '#b48b31',
     palette: 1,
-    waka: ['絵合の扇', '松風の音', '薄雲の月'][i],
+    waka: ['絵合の扇', '松風の音', '薄雲の月', '初音の鶯', '胡蝶の舞'][i],
   };
 });
 
+// 5 Purple Evil Track squares (#21..#25)
 const evilNodes = [
-  ['朝顔', 'あさがお', 'asagao'],
-  ['少女', 'おとめ', 'otome'],
-  ['玉鬘', 'たまかずら', 'tamakazura'],
+  ['朝顔', 'あさがお', 'asagao', [0, 0, 0, 0, 0, 0], 1, '悪玉修羅道 ─ 泥舟・一休み'],
+  ['少女', 'おとめ', 'otome', [0, 0, 0, 0, 0, 0], 2, '悪玉修羅道 ─ 心学戒律・二休み'],
+  ['玉鬘', 'たまかずら', 'tamakazura', [-2, -2, -2, -2, -2, -2], 0, '悪玉修羅道 ─ 祟り・二格戻る'],
+  ['常夏', 'とこなつ', 'rokujo', [2, 2, 0, 0, -1, -2], 0, '悪玉修羅道 ─ 一・二は改心+2、五・六は怨念戻る'],
+  ['野分', 'のわき', 'fujitsubo', [-3, -2, 0, 0, 1, 1], 0, '悪玉修羅道 ─ 野分の嵐で押し戻される'],
 ].map((row, i) => {
-  const [title, reading, art] = row;
+  const [title, reading, art, jumpTable, stayTurns, rule] = row;
   return {
-    id: 19 + i,
+    id: 21 + i,
     title,
     reading,
     art,
     kind: 'evil',
     seal: '悪',
-    stayTurns: i === 0 ? 1 : i === 1 ? 2 : 0,
-    jumpTable: i === 2 ? [-2, -2, -2, -2, -2, -2] : [0, 0, 0, 0, 0, 0],
+    stayTurns,
+    jumpTable,
     tokens: 0,
-    rule: i === 0 ? '悪玉修羅道 ─ 泥舟・一休み' : i === 1 ? '悪玉修羅道 ─ 心学戒律・二休み' : '悪玉修羅道 ─ 祟り・二戻る',
-    x: [520, 375, 230][i], y: 410, w: 130, h: 92,
+    rule,
+    x: [596, 480, 364, 248, 132][i],
+    y: 386,
+    w: 108,
+    h: 98,
     color: '#3b2342',
     palette: 2,
-    waka: ['朝顔の露', '少女の袖', '玉鬘の髪'][i],
+    waka: ['朝顔の露', '少女の袖', '玉鬘の髪', '常夏の撫子', '野分の風'][i],
   };
 });
 
 const genjiGoal = {
-  id: 22,
+  id: 26,
   title: '源氏絵合・上り',
   reading: 'げんじ えあわせ あがり',
   art: 'genji',
@@ -543,22 +581,32 @@ const genjiGoal = {
   stayTurns: 0,
   jumpTable: [0, 0, 0, 0, 0, 0],
   tokens: 0,
-  rule: '金地御帘の前で絵合を結ぶ',
-  x: 300, y: 306, w: 210, h: 64,
+  rule: '金地御帘の前で絵合を結ぶ（同格追突は相手を2格弾く）',
+  x: 290, y: 284, w: 230, h: 86,
   color: '#aa8a3a',
   palette: 0,
 };
 
 const genjiNodes = [...genjiOuterNodes, ...goodNodes, ...evilNodes, genjiGoal].map(n => ({ ...n }));
-genjiNodes[15].next = [16, 19];
-for (let i = 0; i < 15; i++) genjiNodes[i].next = [i + 1];
-genjiNodes[16].next = [17];
-genjiNodes[17].next = [18];
-genjiNodes[18].next = [22];
-genjiNodes[19].next = [20];
-genjiNodes[20].next = [21];
-genjiNodes[21].next = [22];
-genjiNodes[22].next = [];
+for (let i = 0; i < 15; i++) {
+  genjiNodes[i].next = [i + 1];
+  genjiNodes[i].prev = i > 0 ? i - 1 : -1;
+}
+genjiNodes[15].prev = 14;
+genjiNodes[15].next = [16, 21]; // Even -> #16 (Good), Odd -> #21 (Evil)
+
+// Good track #16..#20 -> #26
+for (let i = 16; i <= 20; i++) {
+  genjiNodes[i].prev = i === 16 ? 15 : i - 1;
+  genjiNodes[i].next = [i === 20 ? 26 : i + 1];
+}
+// Evil track #21..#25 -> #26
+for (let i = 21; i <= 25; i++) {
+  genjiNodes[i].prev = i === 21 ? 15 : i - 1;
+  genjiNodes[i].next = [i === 25 ? 26 : i + 1];
+}
+genjiNodes[26].prev = 20;
+genjiNodes[26].next = [];
 
 const genji = {
   id: 'genji',
@@ -574,14 +622,15 @@ const genji = {
   accent: '#8a2e37',
   accent2: '#304f58',
   start: 0,
-  goal: 22,
+  goal: 26,
+  clashPush: 2,
   bounceBack: false,
   requiredTokens: 0,
-  maxTurns: 140,
+  maxTurns: 150,
   nodes: genjiNodes,
   cardIds: ['genji_01', 'genji_02', 'genji_03', 'genji_04', 'genji_05', 'genji_06', 'genji_07', 'genji_08', 'genji_09'],
-  blurb: '偶の目は善玉出世道、奇の目は悪玉修羅道。源氏絵合の上りを目指す。',
-  ruleSummary: '分かれ道で偶なら善道の連跳、奇なら悪道の泥舟・戒律に捕まる。',
+  blurb: '外周十六帖と善悪五帖ずつ計二十七格の王朝長編双六。物怪の引き戻しや慢心の試練、追突合戦を経て源氏絵合の上りを目指す。',
+  ruleSummary: '関屋（#15）で偶なら善道五帖、奇なら悪道五帖へ分岐。道中の物怪や野分の嵐、同格追突（2格弾き）で激しい攻防が続く！',
   layout: 'four-color-split-tracks',
   shape: 'vertical-strip',
   ui: {
@@ -609,7 +658,7 @@ export const CHARMS = [
     mask: 1,
     art: 'charm_stay',
     color: '#9c3a2a',
-    text: '一度だけ「泊」の一休みを無効にする。',
+    text: '「泊」の一休みを無効にし、4手ごとに再充填される。',
   },
   {
     id: 'guard',
@@ -618,7 +667,7 @@ export const CHARMS = [
     mask: 2,
     art: 'charm_guard',
     color: '#315e68',
-    text: '一度だけ妖怪の「戻る」跳びを封じる。',
+    text: '関所や妖怪の「戻る」跳びを封じ、4手ごとに再充填される。',
   },
   {
     id: 'dash',
@@ -627,16 +676,182 @@ export const CHARMS = [
     mask: 4,
     art: 'charm_dash',
     color: '#8a6a28',
-    text: '最初の一度だけ、出目に +1 歩を加える。',
+    text: '出目に +1 歩を加え、要所到達や5手ごとに再充填される。',
   },
 ];
 
 /* ------------------------------------------------------------------ */
-/* 三十六枚 錦絵大図鑑                                                 */
+/* 三十六枚 錦絵大図鑑 ＆ 自定义手札（初期Buff）大系                     */
 /* ------------------------------------------------------------------ */
 
+export const HAND_CARD_BUFF_ARCHETYPES = {
+  headstart: {
+    kind: 'headstart',
+    seal: '先',
+    name: '先駆出立の加護',
+    shortDesc: '開幕+2格前進・初手出目+1歩',
+    detail: '対局開始時に振出から2格先（#2）より出立し、最初の賽振りでも+1歩加速する先手必勝の初期Buff。',
+    color: '#bf3426',
+    startPosBonus: 2,
+    firstRollBonus: 1,
+    jumpBonus: 0,
+    duelPushBonus: 0,
+    duelAdvance: 0,
+    initialTokens: 0,
+    strikePullBonus: 0,
+    strikeCooldown: 4,
+    rechargePeriod: 8,
+  },
+  first_dash: {
+    kind: 'first_dash',
+    seal: '駿',
+    name: '駿足飛脚の加護',
+    shortDesc: '初手+2歩加速・前進跳び+1格',
+    detail: '最初の賽振りで一挙に+2歩加速し、道中のあらゆる前進「跳」マスの飛距離を常時+1格強化する初期Buff。',
+    color: '#2b6e52',
+    startPosBonus: 0,
+    firstRollBonus: 2,
+    jumpBonus: 1,
+    duelPushBonus: 0,
+    duelAdvance: 0,
+    initialTokens: 0,
+    strikePullBonus: 0,
+    strikeCooldown: 4,
+    rechargePeriod: 8,
+  },
+  duel_master: {
+    kind: 'duel_master',
+    seal: '武',
+    name: '荒武者追突の加護',
+    shortDesc: '追突弾き+2格・合戦勝利で+1前進',
+    detail: '同じマスでの追突・一騎討ち時に相手をさらに+2格深く弾き飛ばし、自駒は勢いに乗って+1格前進する初期Buff。',
+    color: '#9b291d',
+    startPosBonus: 0,
+    firstRollBonus: 1,
+    jumpBonus: 0,
+    duelPushBonus: 2,
+    duelAdvance: 1,
+    initialTokens: 0,
+    strikePullBonus: 0,
+    strikeCooldown: 4,
+    rechargePeriod: 8,
+  },
+  regalia_boon: {
+    kind: 'regalia_boon',
+    seal: '宝',
+    name: '秘蔵名物・武具の加護',
+    shortDesc: '開幕時に備え印1つ所持・初手+1歩',
+    detail: '対局開始時から武具印（兜）または宿場名物を1つ携行した状態で始まり、初手も+1歩加速する戦略初期Buff。',
+    color: '#b07f24',
+    startPosBonus: 0,
+    firstRollBonus: 1,
+    jumpBonus: 0,
+    duelPushBonus: 0,
+    duelAdvance: 0,
+    initialTokens: 1,
+    strikePullBonus: 0,
+    strikeCooldown: 4,
+    rechargePeriod: 8,
+  },
+  gale_tactician: {
+    kind: 'gale_tactician',
+    seal: '風',
+    name: '神通辻風の加護',
+    shortDesc: '辻風奇襲3格戻し＆CD2手・開幕+1格',
+    detail: '開幕+1格前進に加え、「辻風奇襲」の引き戻し距離を3格へ強化し、再充填ターンも4手→2手へ短縮する初期Buff。',
+    color: '#2d5c78',
+    startPosBonus: 1,
+    firstRollBonus: 0,
+    jumpBonus: 0,
+    duelPushBonus: 0,
+    duelAdvance: 0,
+    initialTokens: 0,
+    strikePullBonus: 1,
+    strikeCooldown: 2,
+    rechargePeriod: 8,
+  },
+  eternal_talisman: {
+    kind: 'eternal_talisman',
+    seal: '雅',
+    name: '瑞兆護符の加護',
+    shortDesc: '護符再充填2倍速(4手)・開幕+1格＆初手+1歩',
+    detail: '開幕+1格・初手+1歩に加え、消費した懐中守札の再充填周期を8手→4手（2ラウンド）へ半減させる持久戦初期Buff。',
+    color: '#6e3a7a',
+    startPosBonus: 1,
+    firstRollBonus: 1,
+    jumpBonus: 0,
+    duelPushBonus: 0,
+    duelAdvance: 0,
+    initialTokens: 0,
+    strikePullBonus: 0,
+    strikeCooldown: 4,
+    rechargePeriod: 4,
+  },
+};
+
+const CARD_BUFF_ASSIGNMENTS = {
+  tokaido_01: 'headstart',
+  tokaido_02: 'first_dash',
+  tokaido_03: 'duel_master',
+  tokaido_04: 'headstart',
+  tokaido_05: 'first_dash',
+  tokaido_06: 'first_dash',
+  tokaido_07: 'regalia_boon',
+  tokaido_08: 'headstart',
+  tokaido_09: 'regalia_boon',
+
+  yokai_01: 'gale_tactician',
+  yokai_02: 'gale_tactician',
+  yokai_03: 'first_dash',
+  yokai_04: 'eternal_talisman',
+  yokai_05: 'duel_master',
+  yokai_06: 'gale_tactician',
+  yokai_07: 'gale_tactician',
+  yokai_08: 'gale_tactician',
+  yokai_09: 'gale_tactician',
+
+  kesshu_01: 'duel_master',
+  kesshu_02: 'duel_master',
+  kesshu_03: 'duel_master',
+  kesshu_04: 'duel_master',
+  kesshu_05: 'first_dash',
+  kesshu_06: 'regalia_boon',
+  kesshu_07: 'regalia_boon',
+  kesshu_08: 'regalia_boon',
+  kesshu_09: 'regalia_boon',
+
+  genji_01: 'headstart',
+  genji_02: 'eternal_talisman',
+  genji_03: 'eternal_talisman',
+  genji_04: 'headstart',
+  genji_05: 'gale_tactician',
+  genji_06: 'eternal_talisman',
+  genji_07: 'headstart',
+  genji_08: 'first_dash',
+  genji_09: 'eternal_talisman',
+};
+
 function card(id, board, number, title, reading, artist, series, art, rarity, poem, description) {
-  return { id, board, number, title, reading, artist, series, art, rarity, poem, description };
+  const buffKey = CARD_BUFF_ASSIGNMENTS[id] || 'headstart';
+  const archetype = HAND_CARD_BUFF_ARCHETYPES[buffKey] || HAND_CARD_BUFF_ARCHETYPES.headstart;
+  return {
+    id,
+    board,
+    number,
+    title,
+    reading,
+    artist,
+    series,
+    art,
+    rarity,
+    poem,
+    description,
+    buff: {
+      ...archetype,
+      cardId: id,
+      cardTitle: title,
+    },
+  };
 }
 
 export const UKIYOE_CARDS = [
@@ -684,6 +899,12 @@ export const UKIYOE_CARDS = [
 export const CARD_BY_ID = Object.fromEntries(UKIYOE_CARDS.map(c => [c.id, c]));
 export const CARDS_BY_BOARD = BOARDS.map((_, i) => UKIYOE_CARDS.filter(c => c.board === i));
 
+export function getCardById(cardOrId) {
+  if (!cardOrId) return null;
+  if (typeof cardOrId === 'object' && cardOrId.id) return CARD_BY_ID[cardOrId.id] || cardOrId;
+  return CARD_BY_ID[String(cardOrId)] || null;
+}
+
 export function getBoard(index) {
   return BOARDS[index] || BOARDS[0];
 }
@@ -712,13 +933,36 @@ export function createMatch(boardIndex, options = {}) {
       return mask | (charm ? charm.mask : 0);
     }, 0);
   };
+
+  const chosenCard = getCardById(options.customCard);
+  const customBuff = chosenCard && chosenCard.buff
+    ? {
+        ...chosenCard.buff,
+        cardId: chosenCard.id,
+        cardTitle: chosenCard.title,
+        firstRollPending: (chosenCard.buff.firstRollBonus | 0) > 0,
+      }
+    : null;
+
+  const pos = [board.start, board.start];
+  const tokens = [0, 0];
+  if (customBuff) {
+    const bonusPos = Math.max(0, customBuff.startPosBonus | 0);
+    pos[humanSide] = Math.min(board.goal - 1, board.start + bonusPos);
+    tokens[humanSide] = customBuff.initialTokens | 0;
+  }
+
   return {
     boardIndex,
-    pos: [board.start, board.start],
-    tokens: [0, 0],
+    pos,
+    tokens,
     skip: [0, 0],
     charms: [charmMaskFor(0), charmMaskFor(1)],
     charmUsed: [0, 0],
+    customCard: chosenCard ? chosenCard.id : null,
+    customBuff,
+    strikeCooldown: [0, 0],
+    duelCount: 0,
     turn: humanSide === 0 ? 0 : 1,
     humanSide,
     winner: -1,

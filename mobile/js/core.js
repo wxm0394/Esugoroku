@@ -1,11 +1,12 @@
-// Pure rules engine for E-Sugoroku.
+// Pure rules engine for E-Sugoroku (Expanded 24-27 Node Tug-of-War Edition).
 //
-// This mirrors core/esugoroku.c:
+// This mirrors core/esugoroku.c and adds extended tug-of-war mechanics:
 //   * directed graph movement with optional branch edges,
 //   * exact-finish bounce-back on the Tokaido board,
 //   * one jump_table[roll-1] lookup after each landing,
-//   * 泊 stay turns, token masks, Kesshu duels and locked goals,
-//   * three pocket charms (stay / guard / dash), and
+//   * 泊 stay turns, token masks, universal same-square clashes & token raids,
+//   * three pocket charms (stay / guard / dash) with periodic recharge,
+//   * active tactical gale strike (辻風奇襲) to pull back a leading opponent, and
 //   * a six-outcome expected-value evaluator for the AI.
 //
 // Nothing in this file touches the DOM.  Node tests import it directly.
@@ -36,11 +37,15 @@ const EVENT = Object.freeze({
   STAY: 'stay',
   TOKEN: 'token',
   DUEL: 'duel',
+  STEAL: 'steal',
+  STRIKE: 'strike',
+  RECHARGE: 'recharge',
   BOUNCE: 'bounce',
   GOAL_LOCKED: 'goal_locked',
   WIN: 'win',
   SKIP: 'skip',
   CHARM: 'charm',
+  CUSTOM_BUFF: 'custom_buff',
   BRANCH_GOOD: 'branch_good',
   BRANCH_EVIL: 'branch_evil',
 });
@@ -53,9 +58,17 @@ function cloneState(state) {
     skip: [...(state.skip || [0, 0])],
     charms: [...(state.charms || [0, 0])],
     charmUsed: [...(state.charmUsed || [0, 0])],
+    customCard: state.customCard || null,
+    customBuff: state.customBuff ? { ...state.customBuff } : null,
+    strikeCooldown: [...(state.strikeCooldown || [0, 0])],
+    duelCount: state.duelCount || 0,
     history: [...(state.history || [])],
     events: [],
   };
+}
+
+function hasCustomBuff(state, player) {
+  return Boolean(state?.customBuff && player === (state.humanSide ?? 0));
 }
 
 function nodeAt(board, index) {
@@ -79,6 +92,23 @@ function clampNode(board, index) {
   if (index < 0) return board.start;
   if (index >= board.nodes.length) return board.goal;
   return index;
+}
+
+function stepBackward(board, fromPos, steps) {
+  let cur = fromPos;
+  for (let i = 0; i < steps; i++) {
+    const prev = nodeAt(board, cur)?.prev;
+    if (prev === undefined || prev === null || prev < 0) {
+      cur = board.start;
+      break;
+    }
+    cur = prev;
+  }
+  return cur;
+}
+
+function popcount3(mask) {
+  return ((mask & 1) ? 1 : 0) + ((mask & 2) ? 1 : 0) + ((mask & 4) ? 1 : 0);
 }
 
 /*
@@ -161,28 +191,41 @@ function resolveLanding(board, state, player, pos, roll, events, options) {
       }
       if (!cancelled) {
         const multiplier = Math.max(1, Number(options.jumpMultiplier || 1));
+        const jumpBonus = (jump > 0 && hasCustomBuff(state, player))
+          ? (state.customBuff.jumpBonus | 0)
+          : 0;
         const from = pos;
-        const delta = jump * multiplier;
+        const delta = jump * multiplier + jumpBonus;
         pos = clampNode(board, pos + delta);
         state.pos[player] = pos;
         pushEvent(events, EVENT.JUMP, player, from, pos, roll, {
           delta,
           multiplier,
+          jumpBonus,
         });
+        if (jumpBonus > 0) {
+          pushEvent(events, EVENT.CUSTOM_BUFF, player, from, pos, roll, {
+            effect: 'jump_boost',
+            bonus: jumpBonus,
+            cardId: state.customBuff.cardId,
+            buffName: state.customBuff.name,
+          });
+        }
       }
     }
   }
 
   if (pos === board.goal) {
     const required = board.requiredTokens || 0;
-    if ((state.tokens[player] | 0) >= required) {
+    const heldCount = popcount3(state.tokens[player] | 0);
+    if (heldCount >= required || (state.tokens[player] | 0) >= ((1 << required) - 1)) {
       state.winner = player;
       pushEvent(events, EVENT.WIN, player, pos, pos, roll, {});
       state.turnCount = (state.turnCount || 0) + 1;
       return true;
     }
-    const prev = nodeAt(board, pos).prev;
-    const pushed = prev === undefined || prev === null || prev < 0 ? board.start : prev;
+    // Locked Goal: push back 1 step into the battlefield to force token collection
+    const pushed = stepBackward(board, board.goal, 1);
     state.pos[player] = pushed;
     pos = pushed;
     pushEvent(events, EVENT.GOAL_LOCKED, player, board.goal, pos, roll, {
@@ -213,18 +256,102 @@ function resolveLanding(board, state, player, pos, roll, events, options) {
     }
   }
 
-  if (board.style === ESR_STYLE.KESSHU &&
-      state.pos[opponent] === state.pos[player] &&
-      state.pos[player] !== board.start) {
-    const prev = nodeAt(board, state.pos[opponent]).prev;
-    const pushed = prev === undefined || prev === null || prev < 0 ? board.start : prev;
+  // Universal Same-Square Clash / Duel (追突・一騎討ち) across all boards
+  if (state.pos[opponent] === state.pos[player] &&
+      state.pos[player] !== board.start &&
+      state.pos[player] !== board.goal) {
+    const basePush = pos >= 4 ? (board.clashPush || 2) : 1;
+    const duelPushBonus = hasCustomBuff(state, player) ? (state.customBuff.duelPushBonus | 0) : 0;
+    const duelAdvance = hasCustomBuff(state, player) ? (state.customBuff.duelAdvance | 0) : 0;
+    const pushSteps = basePush + duelPushBonus;
+    const pushed = stepBackward(board, state.pos[opponent], pushSteps);
     state.pos[opponent] = pushed;
+    state.duelCount = (state.duelCount || 0) + 1;
+
+    // On Kesshu (or token boards), steal 1 token bit that opponent has and attacker lacks
+    let stolenBit = 0;
+    const oppTokens = state.tokens[opponent] | 0;
+    const myTokens = state.tokens[player] | 0;
+    const stealable = oppTokens & ~myTokens;
+    if (stealable !== 0) {
+      stolenBit = stealable & -stealable; // lowest set bit
+      state.tokens[opponent] &= ~stolenBit;
+      state.tokens[player] |= stolenBit;
+    }
+
+    if (duelAdvance > 0 && pos < board.goal - 1) {
+      const nextStep = (nodeAt(board, pos)?.next || [])[0];
+      if (Number.isInteger(nextStep) && nextStep > pos && nextStep < board.goal) {
+        state.pos[player] = nextStep;
+        pos = nextStep;
+      }
+    }
+
     pushEvent(events, EVENT.DUEL, player, pos, pushed, roll, {
       opponent,
+      pushSteps,
+      duelPushBonus,
+      duelAdvance,
+      stolenBit,
     });
+
+    if (duelPushBonus > 0 || duelAdvance > 0) {
+      pushEvent(events, EVENT.CUSTOM_BUFF, player, pos, pushed, roll, {
+        effect: 'duel_master',
+        duelPushBonus,
+        duelAdvance,
+        cardId: state.customBuff.cardId,
+        buffName: state.customBuff.name,
+      });
+    }
   }
 
   return false;
+}
+
+// Active Tactical Action: Gale Strike (辻風奇襲) pulls a leading opponent back 2 steps (or 3 with gale_tactician buff)
+function applyTacticalStrike(board, state, player = state?.turn ?? 0) {
+  if (!board || !state || (state.winner ?? -1) >= 0) {
+    return { ok: false, state: cloneState(state || {}), events: [] };
+  }
+  const next = cloneState(state);
+  const opponent = 1 - player;
+  if ((next.strikeCooldown[player] | 0) > 0) {
+    return { ok: false, reason: 'cooldown', state: next, events: [] };
+  }
+  if (next.pos[opponent] <= board.start) {
+    return { ok: false, reason: 'at_start', state: next, events: [] };
+  }
+
+  const buffActive = hasCustomBuff(next, player);
+  const pullBonus = buffActive ? (next.customBuff.strikePullBonus | 0) : 0;
+  const pullSteps = 2 + pullBonus;
+  const cdTurns = buffActive && (next.customBuff.strikeCooldown | 0) > 0
+    ? (next.customBuff.strikeCooldown | 0)
+    : 4;
+
+  const from = next.pos[opponent];
+  const to = stepBackward(board, from, pullSteps);
+  next.pos[opponent] = to;
+  next.strikeCooldown[player] = cdTurns;
+  const events = [];
+  pushEvent(events, EVENT.STRIKE, player, from, to, 0, {
+    opponent,
+    delta: to - from,
+    pullSteps,
+    cooldown: cdTurns,
+  });
+  if (pullBonus > 0 || cdTurns < 4) {
+    pushEvent(events, EVENT.CUSTOM_BUFF, player, from, to, 0, {
+      effect: 'gale_tactician',
+      pullSteps,
+      cooldown: cdTurns,
+      cardId: next.customBuff.cardId,
+      buffName: next.customBuff.name,
+    });
+  }
+  next.events = events;
+  return { ok: true, state: next, events, from, to };
 }
 
 function applyRoll(board, state, roll, options = {}) {
@@ -240,6 +367,24 @@ function applyRoll(board, state, roll, options = {}) {
   const player = next.turn | 0;
   const opponent = 1 - player;
   next.lastRoll = roll;
+
+  if ((next.strikeCooldown[player] | 0) > 0) {
+    next.strikeCooldown[player] = Math.max(0, next.strikeCooldown[player] - 1);
+  }
+
+  // Periodic Charm Recharge every 8 half-turns (or 4 half-turns when eternal_talisman Custom Hand Card is active)
+  const rechargePeriod = (hasCustomBuff(next, player) && (next.customBuff.rechargePeriod | 0) > 0)
+    ? (next.customBuff.rechargePeriod | 0)
+    : 8;
+  if (next.turnCount > 0 && next.turnCount % rechargePeriod === 0 && (next.charmUsed[player] | 0) !== 0) {
+    const used = next.charmUsed[player] | 0;
+    const rechargeBit = used & -used;
+    next.charmUsed[player] &= ~rechargeBit;
+    pushEvent(events, EVENT.RECHARGE, player, next.pos[player], next.pos[player], roll, {
+      recharged: rechargeBit,
+      rechargePeriod,
+    });
+  }
 
   if ((next.skip[player] | 0) > 0) {
     next.skip[player] -= 1;
@@ -262,6 +407,19 @@ function applyRoll(board, state, roll, options = {}) {
     });
   }
 
+  if (hasCustomBuff(next, player) && next.customBuff.firstRollPending && (next.customBuff.firstRollBonus | 0) > 0) {
+    const bonus = next.customBuff.firstRollBonus | 0;
+    steps += bonus;
+    next.customBuff.firstRollPending = false;
+    pushEvent(events, EVENT.CUSTOM_BUFF, player, next.pos[player], next.pos[player], roll, {
+      effect: 'first_roll',
+      bonus,
+      steps,
+      cardId: next.customBuff.cardId,
+      buffName: next.customBuff.name,
+    });
+  }
+
   const start = next.pos[player] | 0;
   const branchGood = roll % 2 === 0;
   const walked = walk(board, start, steps, roll, player, branchGood);
@@ -281,13 +439,13 @@ function applyRoll(board, state, roll, options = {}) {
   next.history = [
     ...(next.history || []),
     { player, roll, steps, from: start, to: next.pos[player], won },
-  ].slice(-80);
+  ].slice(-120);
   return { state: next, events, won };
 }
 
 /*
- * Renderer helper for the Tobi board: for every die face, return the square
- * where the player's current piece would land after the jump-table lookup.
+ * Renderer helper: for every die face 1..6, return the square where the
+ * player's current piece would land after the jump-table lookup.
  */
 function previewDestinations(board, state, roll) {
   const player = state.turn | 0;
@@ -322,7 +480,7 @@ function expectedValue(board, state, player) {
     else {
       const span = Math.max(1, board.goal);
       total += 100 * (1 - result.state.pos[player] / span);
-      total += result.state.tokens[player] * 8;
+      total += popcount3(result.state.tokens[player]) * 18;
       total -= result.state.skip[player] * 7;
     }
   }
@@ -370,15 +528,81 @@ function getNode(board, index) {
   return board.nodes[index] || null;
 }
 
+/**
+ * Pure 3D Bone Die Face-Up Orientation (Euler 'YXZ' order: R = Ry(ry) * Rx(rx) * Rz(rz)).
+ * Matches BoxGeometry material order in tabletop_3d.js:
+ *   +X (right): 2, -X (left): 5, +Y (top): 1, -Y (bottom): 6, +Z (front): 3, -Z (back): 4
+ * Because Ry(yaw) is applied last around world +Y, the upward face normal (0, +1, 0)
+ * is 100% invariant (dot = 1.0) for any yaw angle.
+ */
+export const DIE_LOCAL_NORMALS = Object.freeze({
+  1: Object.freeze([0, 1, 0]),
+  2: Object.freeze([1, 0, 0]),
+  3: Object.freeze([0, 0, 1]),
+  4: Object.freeze([0, 0, -1]),
+  5: Object.freeze([-1, 0, 0]),
+  6: Object.freeze([0, -1, 0]),
+});
+
+export function computeDieTargetEulerYXZ(value, yaw = 0) {
+  const v = Number(value) | 0;
+  switch (v) {
+    case 1: return { rx: 0, ry: yaw, rz: 0, order: 'YXZ' };
+    case 2: return { rx: 0, ry: yaw, rz: Math.PI / 2, order: 'YXZ' };
+    case 3: return { rx: -Math.PI / 2, ry: yaw, rz: 0, order: 'YXZ' };
+    case 4: return { rx: Math.PI / 2, ry: yaw, rz: 0, order: 'YXZ' };
+    case 5: return { rx: 0, ry: yaw, rz: -Math.PI / 2, order: 'YXZ' };
+    case 6: return { rx: Math.PI, ry: yaw, rz: 0, order: 'YXZ' };
+    default: return { rx: 0, ry: yaw, rz: 0, order: 'YXZ' };
+  }
+}
+
+/**
+ * Evaluates which 3D die face (1..6) is pointing most strongly toward world +Y (0, 1, 0)
+ * for any Euler rotation (rx, ry, rz) in 'YXZ' order.
+ */
+export function evaluateDieTopFaceYXZ(rx, ry = 0, rz = 0) {
+  const cx = Math.cos(rx);
+  const sx = Math.sin(rx);
+  const cz = Math.cos(rz);
+  const sz = Math.sin(rz);
+
+  let bestFace = 1;
+  let bestDot = -Infinity;
+  const faceDots = {};
+
+  for (let face = 1; face <= 6; face++) {
+    const [nx, ny, nz] = DIE_LOCAL_NORMALS[face];
+    // R = Ry(ry) * Rx(rx) * Rz(rz); world +Y component of R * n is invariant under Ry(ry):
+    const yAfterZ = nx * sz + ny * cz;
+    const worldY = yAfterZ * cx - nz * sx;
+    faceDots[face] = Number(worldY.toFixed(6));
+    if (worldY > bestDot) {
+      bestDot = worldY;
+      bestFace = face;
+    }
+  }
+
+  return {
+    topFace: bestFace,
+    alignmentDot: Number(bestDot.toFixed(6)),
+    faceDots,
+  };
+}
+
 export const EsugorokuCore = Object.freeze({
   ESR_STYLE,
   ESR_CHARM,
   EVENT,
   applyRoll,
+  applyTacticalStrike,
   previewDestinations,
   expectedValue,
   validateBoard,
   getNode,
   styleCode,
   nodeAt,
+  computeDieTargetEulerYXZ,
+  evaluateDieTopFaceYXZ,
 });
+

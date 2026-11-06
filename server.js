@@ -10,6 +10,7 @@ const path = require('path');
 const { URL } = require('url');
 
 const ROOT = path.resolve(__dirname, 'mobile');
+const PUBLIC_ROOT = path.resolve(__dirname, 'public');
 const THREE_ROOT = path.resolve(__dirname, 'node_modules', 'three');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -69,6 +70,14 @@ function safePath(urlPath) {
     const sub = normalized.slice('/vendor/three-addons/'.length);
     const target = path.resolve(THREE_ROOT, 'examples', 'jsm', sub);
     if (target.startsWith(path.resolve(THREE_ROOT, 'examples', 'jsm') + path.sep)) {
+      return target;
+    }
+    return null;
+  }
+  if (normalized.startsWith('/assets/aistudio/') || normalized.startsWith('/public/assets/aistudio/')) {
+    const sub = normalized.replace(/^\/public/, '').replace(/^\/+/, '');
+    const target = path.resolve(PUBLIC_ROOT, sub);
+    if (target.startsWith(PUBLIC_ROOT + path.sep)) {
       return target;
     }
     return null;
