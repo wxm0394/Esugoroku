@@ -9,11 +9,16 @@
     "start": "PORT=3000 HOST=0.0.0.0 node server.js",
     "build": "node tools/test_js_rules.mjs",
     "lint": "node --check server.js && node --check mobile/js/main.js",
-    "test": "node tools/test_js_rules.mjs && node tools/validate_assets.mjs",
+    "test": "node tools/test_js_rules.mjs && node tools/validate_assets.mjs && node tools/test_asset_manager.mjs",
     "assets:validate": "node tools/validate_assets.mjs",
+    "assets:http-check": "node tools/test_assets_http.mjs",
+    "assets:test": "node tools/test_asset_manager.mjs",
     "assets:report": "node tools/validate_assets.mjs --report"
   },
   "dependencies": {
     "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0"
   }
 }

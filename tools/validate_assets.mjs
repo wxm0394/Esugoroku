@@ -4,6 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import Ajv from 'ajv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,8 +32,9 @@ function runValidation() {
     warnings.push(`Schema file not found at ${SCHEMA_PATH}. Skipping schema comparison.`);
   }
 
-  // 2. Read and parse manifest
+  // 2. Read and parse manifest & schema
   let manifest;
+  let schema;
   try {
     const raw = fs.readFileSync(MANIFEST_PATH, 'utf8');
     manifest = JSON.parse(raw);
@@ -40,6 +42,28 @@ function runValidation() {
   } catch (err) {
     console.error(`❌ ERROR: Failed to parse asset-manifest.json: ${err.message}`);
     process.exit(1);
+  }
+
+  if (fs.existsSync(SCHEMA_PATH)) {
+    try {
+      const rawSchema = fs.readFileSync(SCHEMA_PATH, 'utf8');
+      schema = JSON.parse(rawSchema);
+      const ajv = new Ajv({ allErrors: true, verbose: true });
+      const validate = ajv.compile(schema);
+      const valid = validate(manifest);
+      if (!valid) {
+        console.error('❌ Schema Validation Errors:');
+        for (const err of validate.errors) {
+          const errMsg = `Schema Error at "${err.instancePath}": ${err.message}`;
+          errors.push(errMsg);
+          console.error(`  - ${errMsg}`);
+        }
+      } else {
+        console.log('✅ Manifest successfully validated against asset-schema.json');
+      }
+    } catch (err) {
+      errors.push(`Failed to validate schema with Ajv: ${err.message}`);
+    }
   }
 
   const assets = manifest.assets || {};
@@ -62,20 +86,49 @@ function runValidation() {
       continue;
     }
 
-    // Resolve path relative to ROOT_DIR or mobile/ or assets/
-    let targetPath = path.resolve(ROOT_DIR, def.path);
-    let found = fs.existsSync(targetPath);
+    // Resolve path matching server.js static file resolution
+    const cleanPath = def.path.replace(/^\//, '');
+    let candidates = [
+      path.resolve(ROOT_DIR, cleanPath),
+      path.resolve(ROOT_DIR, 'mobile', cleanPath),
+      path.resolve(ROOT_DIR, 'public', cleanPath)
+    ];
 
-    if (!found) {
-      // Try resolving relative to assets/ directory
-      targetPath = path.resolve(ROOT_DIR, 'assets', def.path);
-      found = fs.existsSync(targetPath);
+    if (cleanPath.startsWith('assets/')) {
+      const relPath = cleanPath.slice('assets/'.length);
+      candidates.push(path.resolve(ROOT_DIR, 'assets', relPath));
+      candidates.push(path.resolve(ROOT_DIR, 'mobile/assets', relPath));
+      candidates.push(path.resolve(ROOT_DIR, 'public/assets', relPath));
     }
 
+    let targetPath = null;
+    let found = false;
+
+    for (const cand of candidates) {
+      if (fs.existsSync(cand)) {
+        targetPath = cand;
+        found = true;
+        break;
+      }
+    }
+
+    // Secondary prefix match check for webfont chunks or synthetic assets
     if (!found) {
-      // Try resolving relative to mobile/ directory
-      targetPath = path.resolve(ROOT_DIR, 'mobile', def.path);
-      found = fs.existsSync(targetPath);
+      for (const cand of candidates) {
+        const dir = path.dirname(cand);
+        const baseName = path.basename(cand, path.extname(cand));
+        if (fs.existsSync(dir)) {
+          try {
+            const files = fs.readdirSync(dir);
+            const match = files.find(f => f.startsWith(baseName));
+            if (match) {
+              targetPath = path.join(dir, match);
+              found = true;
+              break;
+            }
+          } catch {}
+        }
+      }
     }
 
     if (found) {

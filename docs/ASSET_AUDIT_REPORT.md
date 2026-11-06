@@ -1,14 +1,14 @@
 # Esugoroku V2.1 Asset Audit Report
 
-Generated on: 2026-11-06T16:54:17.237Z
+Generated on: 2026-11-06T17:28:58.543Z
 
 ## Summary Metrics
 - **Total Registered Assets**: 92
 - **Total Asset Groups**: 10
-- **Verified Physical Assets**: 83
-- **Missing Asset References**: 9
+- **Verified Physical Assets**: 84
+- **Missing Asset References**: 8
 - **Validation Errors**: 0
-- **Validation Warnings**: 9
+- **Validation Warnings**: 8
 
 ## Asset Breakdown by Type
 - **image**: 83

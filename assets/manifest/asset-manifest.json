@@ -5,7 +5,7 @@
   "assets": {
     "board.tokaido.background": {
       "type": "image",
-      "path": "images/boards/tokaido/background.jpg",
+      "path": "/assets/images/boards/tokaido/background.jpg",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -24,7 +24,7 @@
     },
     "board.yokai.background": {
       "type": "image",
-      "path": "images/boards/yokai/background.jpg",
+      "path": "/assets/images/boards/yokai/background.jpg",
       "group": "board.yokai",
       "platforms": [
         "web",
@@ -43,7 +43,7 @@
     },
     "board.kesshu.background": {
       "type": "image",
-      "path": "images/boards/kesshu/background.jpg",
+      "path": "/assets/images/boards/kesshu/background.jpg",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -62,7 +62,7 @@
     },
     "board.genji.background": {
       "type": "image",
-      "path": "images/boards/genji/background.jpg",
+      "path": "/assets/images/boards/genji/background.jpg",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -81,9 +81,13 @@
     },
     "artwork.sheet.tokaido.jinja": {
       "type": "image",
-      "path": "public/assets/aistudio/v2-de9b2227c1ae60d2ad93091f2c368ba2_r_33d70672.jpg",
+      "path": "/assets/aistudio/v2-de9b2227c1ae60d2ad93091f2c368ba2_r_33d70672.jpg",
       "group": "board.tokaido",
-      "platforms": ["web", "mobile", "embedded"],
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
       "variants": [],
       "metadata": {
         "description": "Tokaido Edo Jinja master sheet",
@@ -93,9 +97,13 @@
     },
     "artwork.sheet.tokaido.map": {
       "type": "image",
-      "path": "public/assets/aistudio/v2-0287deb0080d07adcf42166238672c64_r_b2a0b162.jpg",
+      "path": "/assets/aistudio/v2-0287deb0080d07adcf42166238672c64_r_b2a0b162.jpg",
       "group": "board.tokaido",
-      "platforms": ["web", "mobile", "embedded"],
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
       "variants": [],
       "metadata": {
         "description": "Tokaido Map master sheet",
@@ -105,9 +113,13 @@
     },
     "artwork.sheet.tokaido.meibutsu": {
       "type": "image",
-      "path": "public/assets/aistudio/v2-a25c0e4de38fc6975ace74efb5fd39cc_r_b65cdc4b.jpg",
+      "path": "/assets/aistudio/v2-a25c0e4de38fc6975ace74efb5fd39cc_r_b65cdc4b.jpg",
       "group": "board.tokaido",
-      "platforms": ["web", "mobile", "embedded"],
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
       "variants": [],
       "metadata": {
         "description": "Tokaido Meibutsu master sheet",
@@ -117,9 +129,13 @@
     },
     "artwork.sheet.yokai.collage": {
       "type": "image",
-      "path": "public/assets/aistudio/v2-be2eef69ff02fff49f3a362045aa1bb0_r_5a6413a7.jpg",
+      "path": "/assets/aistudio/v2-be2eef69ff02fff49f3a362045aa1bb0_r_5a6413a7.jpg",
       "group": "board.yokai",
-      "platforms": ["web", "mobile", "embedded"],
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
       "variants": [],
       "metadata": {
         "description": "Yokai Collage master sheet",
@@ -129,9 +145,13 @@
     },
     "artwork.sheet.yokai.kabuki": {
       "type": "image",
-      "path": "public/assets/aistudio/v2-ec2e63aab108e2656b088d7dfba6b0ce_r_f3890e4f.jpg",
+      "path": "/assets/aistudio/v2-ec2e63aab108e2656b088d7dfba6b0ce_r_f3890e4f.jpg",
       "group": "board.yokai",
-      "platforms": ["web", "mobile", "embedded"],
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
       "variants": [],
       "metadata": {
         "description": "Yokai Kabuki master sheet",
@@ -141,9 +161,13 @@
     },
     "artwork.sheet.kesshu.tilted": {
       "type": "image",
-      "path": "public/assets/aistudio/v2-66c8cbba45a5e5db3bbeae4d884a556c_r_a1e662dd.jpg",
+      "path": "/assets/aistudio/v2-66c8cbba45a5e5db3bbeae4d884a556c_r_a1e662dd.jpg",
       "group": "board.kesshu",
-      "platforms": ["web", "mobile", "embedded"],
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
       "variants": [],
       "metadata": {
         "description": "Kesshu Tilted master sheet",
@@ -153,9 +177,13 @@
     },
     "artwork.sheet.kesshu.portraits": {
       "type": "image",
-      "path": "public/assets/aistudio/v2-c6536ca0828d251624fa2494fdc2d7e8_r_cf951d0e.jpg",
+      "path": "/assets/aistudio/v2-c6536ca0828d251624fa2494fdc2d7e8_r_cf951d0e.jpg",
       "group": "board.kesshu",
-      "platforms": ["web", "mobile", "embedded"],
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
       "variants": [],
       "metadata": {
         "description": "Kesshu Portraits master sheet",
@@ -165,9 +193,13 @@
     },
     "artwork.sheet.genji.strips": {
       "type": "image",
-      "path": "public/assets/aistudio/v2-2ea7f57afdf0bf62b4d0d8854269efe9_r_cfd81106.jpg",
+      "path": "/assets/aistudio/v2-2ea7f57afdf0bf62b4d0d8854269efe9_r_cfd81106.jpg",
       "group": "board.genji",
-      "platforms": ["web", "mobile", "embedded"],
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
       "variants": [],
       "metadata": {
         "description": "Genji Strips master sheet",
@@ -177,9 +209,13 @@
     },
     "artwork.sheet.genji.palace": {
       "type": "image",
-      "path": "public/assets/aistudio/v2-fd75dd6025dfca9de24f93b336657329_r_2483b494.jpg",
+      "path": "/assets/aistudio/v2-fd75dd6025dfca9de24f93b336657329_r_2483b494.jpg",
       "group": "board.genji",
-      "platforms": ["web", "mobile", "embedded"],
+      "platforms": [
+        "web",
+        "mobile",
+        "embedded"
+      ],
       "variants": [],
       "metadata": {
         "description": "Genji Palace master sheet",
@@ -189,7 +225,7 @@
     },
     "piece.kokeshi": {
       "type": "model",
-      "path": "models/characters/kokeshi/kokeshi.glb",
+      "path": "/assets/models/characters/kokeshi/kokeshi.glb",
       "group": "piece.kokeshi",
       "platforms": [
         "web",
@@ -205,7 +241,7 @@
     },
     "model.dice.bone": {
       "type": "model",
-      "path": "models/props/dice/bone.glb",
+      "path": "/assets/models/props/dice/bone.glb",
       "group": "model.dice",
       "platforms": [
         "web",
@@ -221,7 +257,7 @@
     },
     "audio.sfx.dice-roll": {
       "type": "audio",
-      "path": "audio/sfx/dice-roll.ogg",
+      "path": "/assets/audio/sfx/dice-roll.ogg",
       "group": "audio.common",
       "platforms": [
         "web",
@@ -238,7 +274,7 @@
     },
     "audio.sfx.wood-clack": {
       "type": "audio",
-      "path": "audio/sfx/wood-clack.ogg",
+      "path": "/assets/audio/sfx/wood-clack.ogg",
       "group": "audio.common",
       "platforms": [
         "web",
@@ -255,7 +291,7 @@
     },
     "audio.bgm.tokaido": {
       "type": "audio",
-      "path": "audio/bgm/tokaido/shamisen-koto.mp3",
+      "path": "/assets/audio/bgm/tokaido/shamisen-koto.mp3",
       "group": "audio.bgm",
       "platforms": [
         "web",
@@ -274,7 +310,7 @@
     },
     "audio.bgm.yokai": {
       "type": "audio",
-      "path": "audio/bgm/yokai/shamisen-koto.mp3",
+      "path": "/assets/audio/bgm/yokai/shamisen-koto.mp3",
       "group": "audio.bgm",
       "platforms": [
         "web",
@@ -293,7 +329,7 @@
     },
     "audio.bgm.kesshu": {
       "type": "audio",
-      "path": "audio/bgm/kesshu/shamisen-koto.mp3",
+      "path": "/assets/audio/bgm/kesshu/shamisen-koto.mp3",
       "group": "audio.bgm",
       "platforms": [
         "web",
@@ -312,7 +348,7 @@
     },
     "audio.bgm.genji": {
       "type": "audio",
-      "path": "audio/bgm/genji/shamisen-koto.mp3",
+      "path": "/assets/audio/bgm/genji/shamisen-koto.mp3",
       "group": "audio.bgm",
       "platforms": [
         "web",
@@ -331,7 +367,7 @@
     },
     "ui.icon.dice": {
       "type": "image",
-      "path": "assets/icon.svg",
+      "path": "/assets/icon.svg",
       "group": "ui.icon",
       "platforms": [
         "web",
@@ -347,7 +383,7 @@
     },
     "font.shippori-mincho": {
       "type": "font",
-      "path": "fonts/shipporiminchob1_001.woff2",
+      "path": "/assets/fonts/shipporiminchob1_001.woff2",
       "group": "font.shippori-mincho",
       "platforms": [
         "web"
@@ -363,7 +399,7 @@
     },
     "print.tokaido.nihonbashi": {
       "type": "image",
-      "path": "assets/prints/tokaido_nihonbashi.webp",
+      "path": "/assets/prints/tokaido_nihonbashi.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -380,7 +416,7 @@
     },
     "print.tokaido.shinagawa": {
       "type": "image",
-      "path": "assets/prints/tokaido_shinagawa.webp",
+      "path": "/assets/prints/tokaido_shinagawa.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -397,7 +433,7 @@
     },
     "print.tokaido.dojo": {
       "type": "image",
-      "path": "assets/prints/tokaido_dojo.webp",
+      "path": "/assets/prints/tokaido_dojo.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -414,7 +450,7 @@
     },
     "print.tokaido.kawasaki": {
       "type": "image",
-      "path": "assets/prints/tokaido_kawasaki.webp",
+      "path": "/assets/prints/tokaido_kawasaki.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -431,7 +467,7 @@
     },
     "print.tokaido.tsurumi": {
       "type": "image",
-      "path": "assets/prints/tokaido_tsurumi.webp",
+      "path": "/assets/prints/tokaido_tsurumi.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -448,7 +484,7 @@
     },
     "print.tokaido.kanagawa": {
       "type": "image",
-      "path": "assets/prints/tokaido_kanagawa.webp",
+      "path": "/assets/prints/tokaido_kanagawa.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -465,7 +501,7 @@
     },
     "print.tokaido.hodogaya": {
       "type": "image",
-      "path": "assets/prints/tokaido_hodogaya.webp",
+      "path": "/assets/prints/tokaido_hodogaya.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -482,7 +518,7 @@
     },
     "print.tokaido.inari": {
       "type": "image",
-      "path": "assets/prints/tokaido_inari.webp",
+      "path": "/assets/prints/tokaido_inari.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -499,7 +535,7 @@
     },
     "print.tokaido.totsuka": {
       "type": "image",
-      "path": "assets/prints/tokaido_totsuka.webp",
+      "path": "/assets/prints/tokaido_totsuka.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -516,7 +552,7 @@
     },
     "print.tokaido.fujisawa": {
       "type": "image",
-      "path": "assets/prints/tokaido_fujisawa.webp",
+      "path": "/assets/prints/tokaido_fujisawa.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -533,7 +569,7 @@
     },
     "print.tokaido.hiratsuka": {
       "type": "image",
-      "path": "assets/prints/tokaido_hiratsuka.webp",
+      "path": "/assets/prints/tokaido_hiratsuka.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -550,7 +586,7 @@
     },
     "print.tokaido.oiso": {
       "type": "image",
-      "path": "assets/prints/tokaido_oiso.webp",
+      "path": "/assets/prints/tokaido_oiso.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -567,7 +603,7 @@
     },
     "print.tokaido.tea": {
       "type": "image",
-      "path": "assets/prints/tokaido_tea.webp",
+      "path": "/assets/prints/tokaido_tea.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -584,7 +620,7 @@
     },
     "print.tokaido.odawara": {
       "type": "image",
-      "path": "assets/prints/tokaido_odawara.webp",
+      "path": "/assets/prints/tokaido_odawara.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -601,7 +637,7 @@
     },
     "print.tokaido.hakone": {
       "type": "image",
-      "path": "assets/prints/tokaido_hakone.webp",
+      "path": "/assets/prints/tokaido_hakone.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -618,7 +654,7 @@
     },
     "print.tokaido.mishima": {
       "type": "image",
-      "path": "assets/prints/tokaido_mishima.webp",
+      "path": "/assets/prints/tokaido_mishima.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -635,7 +671,7 @@
     },
     "print.tokaido.kyoto": {
       "type": "image",
-      "path": "assets/prints/tokaido_kyoto.webp",
+      "path": "/assets/prints/tokaido_kyoto.webp",
       "group": "board.tokaido",
       "platforms": [
         "web",
@@ -652,7 +688,7 @@
     },
     "print.yokai.kappa": {
       "type": "image",
-      "path": "assets/prints/yokai_kappa.webp",
+      "path": "/assets/prints/yokai_kappa.webp",
       "group": "board.yokai",
       "platforms": [
         "web",
@@ -669,7 +705,7 @@
     },
     "print.yokai.yukionna": {
       "type": "image",
-      "path": "assets/prints/yokai_yukionna.webp",
+      "path": "/assets/prints/yokai_yukionna.webp",
       "group": "board.yokai",
       "platforms": [
         "web",
@@ -686,7 +722,7 @@
     },
     "print.yokai.nekomata": {
       "type": "image",
-      "path": "assets/prints/yokai_nekomata.webp",
+      "path": "/assets/prints/yokai_nekomata.webp",
       "group": "board.yokai",
       "platforms": [
         "web",
@@ -703,7 +739,7 @@
     },
     "print.yokai.chagama": {
       "type": "image",
-      "path": "assets/prints/yokai_chagama.webp",
+      "path": "/assets/prints/yokai_chagama.webp",
       "group": "board.yokai",
       "platforms": [
         "web",
@@ -720,7 +756,7 @@
     },
     "print.yokai.sanme": {
       "type": "image",
-      "path": "assets/prints/yokai_sanme.webp",
+      "path": "/assets/prints/yokai_sanme.webp",
       "group": "board.yokai",
       "platforms": [
         "web",
@@ -737,7 +773,7 @@
     },
     "print.yokai.funayurei": {
       "type": "image",
-      "path": "assets/prints/yokai_funayurei.webp",
+      "path": "/assets/prints/yokai_funayurei.webp",
       "group": "board.yokai",
       "platforms": [
         "web",
@@ -754,7 +790,7 @@
     },
     "print.yokai.oiwa": {
       "type": "image",
-      "path": "assets/prints/yokai_oiwa.webp",
+      "path": "/assets/prints/yokai_oiwa.webp",
       "group": "board.yokai",
       "platforms": [
         "web",
@@ -771,7 +807,7 @@
     },
     "print.yokai.rokuro": {
       "type": "image",
-      "path": "assets/prints/yokai_rokuro.webp",
+      "path": "/assets/prints/yokai_rokuro.webp",
       "group": "board.yokai",
       "platforms": [
         "web",
@@ -788,7 +824,7 @@
     },
     "print.yokai.kyubi": {
       "type": "image",
-      "path": "assets/prints/yokai_kyubi.webp",
+      "path": "/assets/prints/yokai_kyubi.webp",
       "group": "board.yokai",
       "platforms": [
         "web",
@@ -805,7 +841,7 @@
     },
     "print.yokai.hyakumonogatari": {
       "type": "image",
-      "path": "assets/prints/yokai_hyakumonogatari.webp",
+      "path": "/assets/prints/yokai_hyakumonogatari.webp",
       "group": "board.yokai",
       "platforms": [
         "web",
@@ -822,7 +858,7 @@
     },
     "print.kesshu.shootsujin": {
       "type": "image",
-      "path": "assets/prints/kesshu_shootsujin.webp",
+      "path": "/assets/prints/kesshu_shootsujin.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -839,7 +875,7 @@
     },
     "print.kesshu.yari": {
       "type": "image",
-      "path": "assets/prints/kesshu_yari.webp",
+      "path": "/assets/prints/kesshu_yari.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -856,7 +892,7 @@
     },
     "print.kesshu.yumi": {
       "type": "image",
-      "path": "assets/prints/kesshu_yumi.webp",
+      "path": "/assets/prints/kesshu_yumi.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -873,7 +909,7 @@
     },
     "print.kesshu.kabuto": {
       "type": "image",
-      "path": "assets/prints/kesshu_kabuto.webp",
+      "path": "/assets/prints/kesshu_kabuto.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -890,7 +926,7 @@
     },
     "print.kesshu.gungi": {
       "type": "image",
-      "path": "assets/prints/kesshu_gungi.webp",
+      "path": "/assets/prints/kesshu_gungi.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -907,7 +943,7 @@
     },
     "print.kesshu.oyoroi": {
       "type": "image",
-      "path": "assets/prints/kesshu_oyoroi.webp",
+      "path": "/assets/prints/kesshu_oyoroi.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -924,7 +960,7 @@
     },
     "print.kesshu.ikkit": {
       "type": "image",
-      "path": "assets/prints/kesshu_ikkit.webp",
+      "path": "/assets/prints/kesshu_ikkit.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -941,7 +977,7 @@
     },
     "print.kesshu.tachi": {
       "type": "image",
-      "path": "assets/prints/kesshu_tachi.webp",
+      "path": "/assets/prints/kesshu_tachi.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -958,7 +994,7 @@
     },
     "print.kesshu.meiyaku": {
       "type": "image",
-      "path": "assets/prints/kesshu_meiyaku.webp",
+      "path": "/assets/prints/kesshu_meiyaku.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -975,7 +1011,7 @@
     },
     "print.kesshu.shinobi": {
       "type": "image",
-      "path": "assets/prints/kesshu_shinobi.webp",
+      "path": "/assets/prints/kesshu_shinobi.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -992,7 +1028,7 @@
     },
     "print.kesshu.tekijin": {
       "type": "image",
-      "path": "assets/prints/kesshu_tekijin.webp",
+      "path": "/assets/prints/kesshu_tekijin.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -1009,7 +1045,7 @@
     },
     "print.kesshu.jindaiko": {
       "type": "image",
-      "path": "assets/prints/kesshu_jindaiko.webp",
+      "path": "/assets/prints/kesshu_jindaiko.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -1026,7 +1062,7 @@
     },
     "print.kesshu.kesshi": {
       "type": "image",
-      "path": "assets/prints/kesshu_kesshi.webp",
+      "path": "/assets/prints/kesshu_kesshi.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -1043,7 +1079,7 @@
     },
     "print.kesshu.kachidoki": {
       "type": "image",
-      "path": "assets/prints/kesshu_kachidoki.webp",
+      "path": "/assets/prints/kesshu_kachidoki.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -1060,7 +1096,7 @@
     },
     "print.kesshu.agarimae": {
       "type": "image",
-      "path": "assets/prints/kesshu_agarimae.webp",
+      "path": "/assets/prints/kesshu_agarimae.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -1077,7 +1113,7 @@
     },
     "print.kesshu.agari": {
       "type": "image",
-      "path": "assets/prints/kesshu_agari.webp",
+      "path": "/assets/prints/kesshu_agari.webp",
       "group": "board.kesshu",
       "platforms": [
         "web",
@@ -1094,7 +1130,7 @@
     },
     "print.genji.kiritsubo": {
       "type": "image",
-      "path": "assets/prints/genji_kiritsubo.webp",
+      "path": "/assets/prints/genji_kiritsubo.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1111,7 +1147,7 @@
     },
     "print.genji.hahakigi": {
       "type": "image",
-      "path": "assets/prints/genji_hahakigi.webp",
+      "path": "/assets/prints/genji_hahakigi.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1128,7 +1164,7 @@
     },
     "print.genji.utsusemi": {
       "type": "image",
-      "path": "assets/prints/genji_utsusemi.webp",
+      "path": "/assets/prints/genji_utsusemi.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1145,7 +1181,7 @@
     },
     "print.genji.yugao": {
       "type": "image",
-      "path": "assets/prints/genji_yugao.webp",
+      "path": "/assets/prints/genji_yugao.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1162,7 +1198,7 @@
     },
     "print.genji.wakamurasaki": {
       "type": "image",
-      "path": "assets/prints/genji_wakamurasaki.webp",
+      "path": "/assets/prints/genji_wakamurasaki.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1179,7 +1215,7 @@
     },
     "print.genji.suetsumuhana": {
       "type": "image",
-      "path": "assets/prints/genji_suetsumuhana.webp",
+      "path": "/assets/prints/genji_suetsumuhana.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1196,7 +1232,7 @@
     },
     "print.genji.momijinoga": {
       "type": "image",
-      "path": "assets/prints/genji_momijinoga.webp",
+      "path": "/assets/prints/genji_momijinoga.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1213,7 +1249,7 @@
     },
     "print.genji.hananoen": {
       "type": "image",
-      "path": "assets/prints/genji_hananoen.webp",
+      "path": "/assets/prints/genji_hananoen.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1230,7 +1266,7 @@
     },
     "print.genji.aoi": {
       "type": "image",
-      "path": "assets/prints/genji_aoi.webp",
+      "path": "/assets/prints/genji_aoi.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1247,7 +1283,7 @@
     },
     "print.genji.sakaki": {
       "type": "image",
-      "path": "assets/prints/genji_sakaki.webp",
+      "path": "/assets/prints/genji_sakaki.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1264,7 +1300,7 @@
     },
     "print.genji.hanachirusato": {
       "type": "image",
-      "path": "assets/prints/genji_hanachirusato.webp",
+      "path": "/assets/prints/genji_hanachirusato.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1281,7 +1317,7 @@
     },
     "print.genji.suma": {
       "type": "image",
-      "path": "assets/prints/genji_suma.webp",
+      "path": "/assets/prints/genji_suma.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1298,7 +1334,7 @@
     },
     "print.genji.akashi": {
       "type": "image",
-      "path": "assets/prints/genji_akashi.webp",
+      "path": "/assets/prints/genji_akashi.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1315,7 +1351,7 @@
     },
     "print.genji.miotsukushi": {
       "type": "image",
-      "path": "assets/prints/genji_miotsukushi.webp",
+      "path": "/assets/prints/genji_miotsukushi.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1332,7 +1368,7 @@
     },
     "print.genji.yomogiu": {
       "type": "image",
-      "path": "assets/prints/genji_yomogiu.webp",
+      "path": "/assets/prints/genji_yomogiu.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1349,7 +1385,7 @@
     },
     "print.genji.sekiya": {
       "type": "image",
-      "path": "assets/prints/genji_sekiya.webp",
+      "path": "/assets/prints/genji_sekiya.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1366,7 +1402,7 @@
     },
     "print.genji.eawase": {
       "type": "image",
-      "path": "assets/prints/genji_eawase.webp",
+      "path": "/assets/prints/genji_eawase.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1383,7 +1419,7 @@
     },
     "print.genji.matsukaze": {
       "type": "image",
-      "path": "assets/prints/genji_matsukaze.webp",
+      "path": "/assets/prints/genji_matsukaze.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1400,7 +1436,7 @@
     },
     "print.genji.usugumo": {
       "type": "image",
-      "path": "assets/prints/genji_usugumo.webp",
+      "path": "/assets/prints/genji_usugumo.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1417,7 +1453,7 @@
     },
     "print.genji.asagao": {
       "type": "image",
-      "path": "assets/prints/genji_asagao.webp",
+      "path": "/assets/prints/genji_asagao.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1434,7 +1470,7 @@
     },
     "print.genji.otome": {
       "type": "image",
-      "path": "assets/prints/genji_otome.webp",
+      "path": "/assets/prints/genji_otome.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1451,7 +1487,7 @@
     },
     "print.genji.tamakazura": {
       "type": "image",
-      "path": "assets/prints/genji_tamakazura.webp",
+      "path": "/assets/prints/genji_tamakazura.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1468,7 +1504,7 @@
     },
     "print.genji.genji": {
       "type": "image",
-      "path": "assets/prints/genji_genji.webp",
+      "path": "/assets/prints/genji_genji.webp",
       "group": "board.genji",
       "platforms": [
         "web",
@@ -1485,7 +1521,7 @@
     },
     "charm.charm_stay": {
       "type": "image",
-      "path": "assets/prints/charm_stay.webp",
+      "path": "/assets/prints/charm_stay.webp",
       "group": "charm",
       "platforms": [
         "web",
@@ -1502,7 +1538,7 @@
     },
     "charm.charm_guard": {
       "type": "image",
-      "path": "assets/prints/charm_guard.webp",
+      "path": "/assets/prints/charm_guard.webp",
       "group": "charm",
       "platforms": [
         "web",
@@ -1519,7 +1555,7 @@
     },
     "charm.charm_dash": {
       "type": "image",
-      "path": "assets/prints/charm_dash.webp",
+      "path": "/assets/prints/charm_dash.webp",
       "group": "charm",
       "platforms": [
         "web",

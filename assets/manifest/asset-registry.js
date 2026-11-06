@@ -55,19 +55,33 @@ export class AssetRegistryImpl {
    * @returns {string[]}
    */
   getAssetsByGroup(groupNameOrPrefix) {
-    // 优先匹配显式定义的 group
-    if (this.groupsMap.has(groupNameOrPrefix)) {
-      return this.groupsMap.get(groupNameOrPrefix).assets || [];
-    }
+    const matched = new Set();
 
-    // 前缀匹配 (例如 "board.tokaido" 匹配 "board.tokaido.background", "board.tokaido.node-art")
-    const matched = [];
-    for (const [id, asset] of this.assetsMap.entries()) {
-      if (asset.group === groupNameOrPrefix || id.startsWith(groupNameOrPrefix + '.')) {
-        matched.push(id);
+    // 1) 显式 groupDef.assets 数组
+    if (this.groupsMap.has(groupNameOrPrefix)) {
+      const groupDef = this.groupsMap.get(groupNameOrPrefix);
+      if (groupDef && Array.isArray(groupDef.assets)) {
+        for (const id of groupDef.assets) {
+          matched.add(id);
+        }
       }
     }
-    return matched;
+
+    // 2) 匹配 asset.group 属性值
+    for (const [id, asset] of this.assetsMap.entries()) {
+      if (asset.group === groupNameOrPrefix) {
+        matched.add(id);
+      }
+    }
+
+    // 3) ID 前缀匹配 和 精确 ID 匹配
+    for (const [id, asset] of this.assetsMap.entries()) {
+      if (id === groupNameOrPrefix || id.startsWith(groupNameOrPrefix + '.')) {
+        matched.add(id);
+      }
+    }
+
+    return Array.from(matched);
   }
 
   /**
