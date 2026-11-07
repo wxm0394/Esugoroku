@@ -9,6 +9,7 @@ export class AssetRegistryImpl {
     this.assetsMap = new Map();
     this.groupsMap = new Map();
     this.programmaticRegistry = new Map(); // Programmatic Factory Registry
+    this.resolvers = new Map(); // Runtime resolver bindings
     this.init(data);
   }
 
@@ -22,6 +23,7 @@ export class AssetRegistryImpl {
     this.assetsMap.clear();
     this.groupsMap.clear();
     this.programmaticRegistry.clear();
+    this.resolvers.clear();
 
     if (!this.manifest || !this.manifest.assets) {
       console.error('AssetRegistry: Invalid manifest data.');
@@ -32,11 +34,12 @@ export class AssetRegistryImpl {
     for (const [id, asset] of Object.entries(this.manifest.assets)) {
       this.assetsMap.set(id, { id, ...asset });
       // Register programmatic assets in the factory registry
-      if (asset.type === 'programmatic' && asset.sourceType) {
+      if (asset.type === 'programmatic' && asset.implementationKey) {
         this.programmaticRegistry.set(id, {
-          type: asset.sourceType,
+          id,
+          type: asset.sourceType || 'factory',
+          implementationKey: asset.implementationKey,
           path: asset.path,
-          factory: this._createProgrammaticAsset.bind(this, id)
         });
       }
     }
@@ -65,6 +68,22 @@ export class AssetRegistryImpl {
    */
   hasAsset(id) {
     return this.assetsMap.has(id);
+  }
+
+  /**
+   * 注册运行时解析器
+   * @param {string} id - Asset ID 或 implementationKey
+   * @param {Function} resolver - 返回资产实例的函数
+   */
+  registerProgrammaticAsset(id, resolver) {
+    this.resolvers.set(id, resolver);
+    if (!this.programmaticRegistry.has(id)) {
+      this.programmaticRegistry.set(id, {
+        id,
+        type: 'factory',
+        implementationKey: id,
+      });
+    }
   }
 
   /**
@@ -129,8 +148,11 @@ export class AssetRegistryImpl {
       if (!asset.type) {
         errors.push(`Asset "${id}" missing required field "type".`);
       }
-      if (!asset.path) {
+      if (asset.type !== 'programmatic' && !asset.path) {
         errors.push(`Asset "${id}" missing required field "path".`);
+      }
+      if (asset.type === 'programmatic' && !asset.implementationKey) {
+        errors.push(`Asset "${id}" missing required field "implementationKey".`);
       }
       if (!asset.group) {
         errors.push(`Asset "${id}" missing required field "group".`);
@@ -163,52 +185,208 @@ export class AssetRegistryImpl {
   }
 
   /**
-   * Programmatic Factory Registry: Create/load a programmatic asset instance
+   * Programmatic Factory Registry: Create/resolve a programmatic asset instance (AssetManager compatibility)
    * @param {string} id - Asset ID
-   * @returns {Promise<object>} - Asset instance (HTMLImageElement, AudioBuffer, etc.)
+   * @returns {Promise<object>} - Asset instance
    */
   async createProgrammaticAsset(id) {
-    const registryEntry = this.programmaticRegistry.get(id);
-    if (!registryEntry) {
+    return this.resolveProgrammaticAsset(id);
+  }
+
+  /**
+   * Programmatic Factory Registry: Resolve/create a programmatic asset instance
+   * @param {string} id - Asset ID
+   * @returns {Promise<object>} - Asset instance
+   */
+  async resolveProgrammaticAsset(id) {
+    let registryEntry = this.programmaticRegistry.get(id);
+    if (!registryEntry && this.assetsMap.has(id)) {
+      const asset = this.assetsMap.get(id);
+      if (asset.type === 'programmatic') {
+        registryEntry = {
+          id,
+          type: asset.sourceType || 'factory',
+          implementationKey: asset.implementationKey || id
+        };
+      }
+    }
+
+    if (!registryEntry && !this.resolvers.has(id)) {
       throw new Error(`Asset "${id}" is not a programmatic asset or not registered in factory registry.`);
     }
 
-    // Different factory methods based on sourceType
-    switch (registryEntry.type) {
-      case 'factory':
-        return registryEntry.factory();
-      case 'procedural':
-        return registryEntry.factory();
+    // First check if a runtime resolver is registered
+    const resolver = this.resolvers.get(id);
+    if (resolver) {
+      return resolver(registryEntry || { id });
+    }
+
+    // Default resolvers based on implementationKey
+    const implementationKey = registryEntry.implementationKey;
+    switch (implementationKey) {
+      case 'piece.kokeshi':
+      case 'createKokeshiPawn':
+        return this._createKokeshiPawnResolver(registryEntry);
+      case 'model.dice.bone':
+      case 'createBoneDice':
+        return this._createBoneDiceResolver(registryEntry);
+      case 'audio.sfx.dice-roll':
+      case 'audio.throwDie':
+        return this._createDiceRollResolver(registryEntry);
+      case 'audio.sfx.wood-clack':
+      case 'audio.woodClack':
+        return this._createWoodClackResolver(registryEntry);
+      case 'audio.bgm.tokaido':
+        return this._createBgmThemeResolver(registryEntry, 'tokaido');
+      case 'audio.bgm.yokai':
+        return this._createBgmThemeResolver(registryEntry, 'yokai');
+      case 'audio.bgm.kesshu':
+        return this._createBgmThemeResolver(registryEntry, 'kesshu');
+      case 'audio.bgm.genji':
+        return this._createBgmThemeResolver(registryEntry, 'genji');
       default:
-        throw new Error(`Unknown programmatic source type: ${registryEntry.type}`);
+        // Return a clean programmatic representation without fake paths
+        return {
+          id,
+          type: registryEntry.type,
+          isProgrammatic: true,
+          implementationKey: registryEntry.implementationKey,
+          instance: null,
+          load: async () => {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            return { success: true };
+          }
+        };
     }
   }
 
   /**
-   * Internal factory method for kokeshi pawn model
-   * @param {string} id
-   * @returns {Promise<object>}
+   * Default resolver for kokeshi pawn - returns pawn factory info
+   * @param {object} registryEntry
+   * @returns {object}
    */
-  async _createProgrammaticAsset(id) {
-    const assetDef = this.assetsMap.get(id);
-    if (!assetDef) {
-      throw new Error(`Asset "${id}" not found in manifest.`);
-    }
-
-    // Return a placeholder/proxy for the programmatic asset
-    // In a real implementation, this would create Three.js models, WebAudio buffers, etc.
+  _createKokeshiPawnResolver(registryEntry) {
     return {
-      id,
-      type: assetDef.type,
+      id: registryEntry.id,
+      type: registryEntry.type,
       isProgrammatic: true,
-      path: assetDef.path,
-      metadata: assetDef.metadata,
-      // Placeholder - actual creation would happen in the renderer/audio system
-      instance: null,
-      load: async () => {
-        // Simulate async loading
-        await new Promise(resolve => setTimeout(resolve, 100));
-        return { success: true };
+      implementationKey: registryEntry.implementationKey,
+      kind: '3d-pawn',
+      factoryInfo: {
+        create: (side, primaryHex, accentHex, labelText) => {
+          // In real Three.js environment, this would call createKokeshiPawn
+          // For Node/mock, return structured pawn definition
+          return {
+            kind: 'kokeshi-pawn',
+            side,
+            primaryHex,
+            accentHex,
+            labelText,
+            parts: 8,
+            isThreeJSGroup: typeof THREE !== 'undefined'
+          };
+        }
+      }
+    };
+  }
+
+  /**
+   * Default resolver for bone dice - returns dice factory info
+   * @param {object} registryEntry
+   * @returns {object}
+   */
+  _createBoneDiceResolver(registryEntry) {
+    return {
+      id: registryEntry.id,
+      type: registryEntry.type,
+      isProgrammatic: true,
+      implementationKey: registryEntry.implementationKey,
+      kind: '3d-dice',
+      factoryInfo: {
+        create: () => {
+          // In real Three.js environment, this would create bone dice mesh + pips
+          // For Node/mock, return structured dice definition
+          return {
+            kind: 'bone-dice',
+            faces: 6,
+            isThreeJSGroup: typeof THREE !== 'undefined'
+          };
+        }
+      }
+    };
+  }
+
+  /**
+   * Default resolver for dice roll SFX - returns audio buffer info
+   * @param {object} registryEntry
+   * @returns {object}
+   */
+  _createDiceRollResolver(registryEntry) {
+    return {
+      id: registryEntry.id,
+      type: registryEntry.type,
+      isProgrammatic: true,
+      implementationKey: registryEntry.implementationKey,
+      kind: 'webaudio-sfx',
+      factoryInfo: {
+        play: () => {
+          // In real WebAudio environment, this would call audio.throwDie()
+          // For Node/mock, return structured SFX definition
+          return {
+            kind: 'dice-roll', type: 'webaudio-sfx', playable: true
+          };
+        }
+      }
+    };
+  }
+
+  /**
+   * Default resolver for wood clack SFX - returns audio buffer info
+   * @param {object} registryEntry
+   * @returns {object}
+   */
+  _createWoodClackResolver(registryEntry) {
+    return {
+      id: registryEntry.id,
+      type: registryEntry.type,
+      isProgrammatic: true,
+      implementationKey: registryEntry.implementationKey,
+      kind: 'webaudio-sfx',
+      factoryInfo: {
+        play: () => {
+          // In real WebAudio environment, this would call audio.woodClack()
+          // For Node/mock, return structured SFX definition
+          return {
+            kind: 'wood-clack', type: 'webaudio-sfx', playable: true
+          };
+        }
+      }
+    };
+  }
+
+  /**
+   * Default resolver for BGM theme - returns BGM theme definition
+   * @param {object} registryEntry
+   * @param {string} boardId
+   * @returns {object}
+   */
+  _createBgmThemeResolver(registryEntry, boardId) {
+    // Import BGM themes from audio.js
+    const { BGM_THEMES, getBgmTheme } = globalThis.__esugorokuAudio || {};
+    const theme = (BGM_THEMES && BGM_THEMES[boardId]) || (getBgmTheme && getBgmTheme(boardId)) || { id: boardId };
+    return {
+      id: registryEntry.id,
+      type: registryEntry.type,
+      isProgrammatic: true,
+      implementationKey: registryEntry.implementationKey,
+      kind: 'webaudio-bgm',
+      factoryInfo: {
+        theme,
+        getTheme: () => theme,
+        computeStepNotes: (stepIndex = 0) => {
+          // In real environment, this would call computeBgmStepNotes
+          return { themeId: boardId, step: stepIndex };
+        }
       }
     };
   }

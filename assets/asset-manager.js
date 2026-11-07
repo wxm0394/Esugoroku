@@ -134,11 +134,20 @@ export class AssetManager {
     const isProg = (this.registry && typeof this.registry.isProgrammatic === 'function') &&
                    (this.registry.isProgrammatic(id) || asset.sourceType === 'factory');
     if (isProg && typeof this.registry.createProgrammaticAsset === 'function') {
-      const progAsset = await this.registry.createProgrammaticAsset(id);
-      if (progAsset) {
-        this.assetCache.set(id, progAsset);
-        return progAsset;
-      }
+      const progPromise = (async () => {
+        try {
+          const progAsset = await this.registry.createProgrammaticAsset(id);
+          if (progAsset) {
+            this.assetCache.set(id, progAsset);
+            return progAsset;
+          }
+          return null;
+        } finally {
+          this.pendingLoads.delete(id);
+        }
+      })();
+      this.pendingLoads.set(id, progPromise);
+      return await progPromise;
     }
 
     const loadPromise = (async () => {

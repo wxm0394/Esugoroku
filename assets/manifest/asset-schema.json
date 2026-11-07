@@ -26,7 +26,6 @@
         "type": "object",
         "required": [
           "type",
-          "path",
           "group",
           "platforms"
         ],
@@ -47,6 +46,10 @@
           },
           "path": {
             "type": "string"
+          },
+          "implementationKey": {
+            "type": "string",
+            "description": "Required for programmatic assets; maps to a factory resolver in the AssetRegistry"
           },
           "sourceType": {
             "type": "string",
@@ -142,6 +145,35 @@
           "version": {
             "type": "string"
           }
+        },
+        "if": {
+          "properties": {
+            "type": {
+              "const": "programmatic"
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "implementationKey"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Optional for programmatic assets; should not reference non-existent files"
+            }
+          }
+        },
+        "else": {
+          "required": [
+            "path"
+          ],
+          "properties": {
+            "implementationKey": {
+              "type": "string",
+              "description": "Optional for physical assets; should not be present for pure physical assets"
+            }
+          }
         }
       }
     },
@@ -169,7 +201,12 @@
           "platforms": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "web",
+                "mobile",
+                "embedded"
+              ]
             }
           }
         }

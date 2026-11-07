@@ -81,6 +81,13 @@ function runValidation() {
     if (!def.type) {
       errors.push(`Asset "${id}" is missing required field "type".`);
     }
+    if (def.type === 'programmatic' || def.sourceType === 'factory') {
+      if (!def.implementationKey) {
+        errors.push(`Programmatic asset "${id}" is missing required field "implementationKey".`);
+      }
+      existCount++;
+      continue;
+    }
     if (!def.path) {
       errors.push(`Asset "${id}" is missing required field "path".`);
       continue;

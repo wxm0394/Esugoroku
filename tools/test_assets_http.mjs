@@ -133,7 +133,7 @@ async function runHttpCheck() {
     const url = `${baseUrl}/${cleanPath}`;
 
     // Determine if this is a programmatic asset
-    const isProgrammatic = def.sourceType === 'programmatic' || /\.glb$|\.ogg$|\.mp3$/.test(cleanPath);
+    const isProgrammatic = def.sourceType === 'programmatic';
 
     if (checked.has(id)) continue;
     checked.add(id);

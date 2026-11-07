@@ -78,16 +78,61 @@ async function runUnitTests() {
   console.log('  ✅ Request de-duplication tests passed.');
 
   // 4. Test Programmatic Asset Registry & Creation
-  console.log('Test 4: Programmatic Asset Registry & Preloading');
+  console.log('Test 4: Programmatic Asset Registry & Preloading (3D Models, SFX & BGM Themes)');
   assert.ok(registry.isProgrammatic('piece.kokeshi'), 'piece.kokeshi should be identified as programmatic');
   assert.ok(registry.isProgrammatic('audio.sfx.dice-roll'), 'audio.sfx.dice-roll should be identified as programmatic');
+  assert.ok(registry.isProgrammatic('audio.bgm.tokaido'), 'audio.bgm.tokaido should be identified as programmatic');
+  assert.ok(registry.isProgrammatic('audio.bgm.genji'), 'audio.bgm.genji should be identified as programmatic');
 
+  // Test 3D Kokeshi pawn factory resolution
   const kokeshiAsset = await manager.preloadAsset('piece.kokeshi');
   assert.ok(kokeshiAsset, 'Preloading piece.kokeshi should return generated programmatic asset object');
   assert.equal(kokeshiAsset.id, 'piece.kokeshi', 'Programmatic asset ID should match');
-  assert.equal(kokeshiAsset.type, 'programmatic', 'Programmatic asset type should be programmatic');
+  assert.equal(kokeshiAsset.implementationKey, 'piece.kokeshi', 'Implementation key should match');
+  assert.ok(kokeshiAsset.factoryInfo && typeof kokeshiAsset.factoryInfo.create === 'function', 'Kokeshi pawn should expose create factory method');
+  const pawnInst = kokeshiAsset.factoryInfo.create(0, '#bf3426', '#f5dc98', '一');
+  assert.equal(pawnInst.kind, 'kokeshi-pawn', 'Created pawn should match kind kokeshi-pawn');
+  assert.equal(pawnInst.side, 0, 'Created pawn side should match');
+
+  // Test 3D Bone Dice factory resolution
+  const diceAsset = await manager.preloadAsset('model.dice.bone');
+  assert.ok(diceAsset, 'Preloading model.dice.bone should return generated programmatic asset object');
+  assert.ok(diceAsset.factoryInfo && typeof diceAsset.factoryInfo.create === 'function', 'Bone dice should expose create factory method');
+  const diceInst = diceAsset.factoryInfo.create();
+  assert.equal(diceInst.kind, 'bone-dice', 'Created dice should match kind bone-dice');
+  assert.equal(diceInst.faces, 6, 'Created dice should have 6 faces');
+
+  // Test BGM theme resolution for all 4 themes
+  for (const boardId of ['tokaido', 'yokai', 'kesshu', 'genji']) {
+    const bgmAsset = await manager.preloadAsset(`audio.bgm.${boardId}`);
+    assert.ok(bgmAsset, `Preloading audio.bgm.${boardId} should succeed`);
+    assert.equal(bgmAsset.kind, 'webaudio-bgm', `BGM asset type should be webaudio-bgm`);
+    assert.ok(bgmAsset.factoryInfo, `BGM asset should have factoryInfo`);
+  }
+
+  // Test Programmatic Concurrency De-duplication (call preload 5 times concurrently, ensure resolver count = 1)
+  let executionCount = 0;
+  registry.registerProgrammaticAsset('test.concurrent.asset', async () => {
+    executionCount++;
+    await new Promise(r => setTimeout(r, 20));
+    return { id: 'test.concurrent.asset', count: executionCount };
+  });
+  // Temporarily add mock asset definition to manifest map for test
+  registry.assetsMap.set('test.concurrent.asset', { id: 'test.concurrent.asset', type: 'programmatic', sourceType: 'factory' });
+
+  const concurrentResults = await Promise.all([
+    manager.preloadAsset('test.concurrent.asset'),
+    manager.preloadAsset('test.concurrent.asset'),
+    manager.preloadAsset('test.concurrent.asset'),
+    manager.preloadAsset('test.concurrent.asset'),
+    manager.preloadAsset('test.concurrent.asset')
+  ]);
+  assert.equal(executionCount, 1, 'Programmatic asset factory execution count must be 1 for concurrent requests');
+  assert.equal(concurrentResults.length, 5, 'All 5 concurrent promises should resolve');
+  assert.equal(concurrentResults[0], concurrentResults[4], 'All concurrent promises should resolve to identical instance');
+
   assert.ok(manager.assetCache.has('piece.kokeshi'), 'Programmatic asset should be stored in assetCache');
-  console.log('  ✅ Programmatic asset registry & preloading tests passed.');
+  console.log('  ✅ Programmatic asset registry, 3D/Audio factories & concurrency de-duplication tests passed.');
 
   // 5. Test BrowserAssetAdapter URL joining logic
   console.log('Test 5: BrowserAssetAdapter URL joining & protocol preservation');

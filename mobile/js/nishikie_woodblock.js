@@ -100,21 +100,25 @@ export function preloadUkiyoeSheets(onUpdate) {
     if (assetId) {
       try {
         await AssetManager.preloadAsset(assetId);
-        const cachedObj = AssetManager.getAsset(assetId);
-        let imgObj = null;
-        if (cachedObj && cachedObj.data instanceof Image) {
-          imgObj = cachedObj.data;
-        } else if (cachedObj && cachedObj.data) {
-          imgObj = cachedObj.data;
-        } else {
-          // If AssetManager has URL, construct Image element
-          const url = AssetManager.getUrl(assetId) || MASTER_SHEETS[key];
-          imgObj = new Image();
-          imgObj.src = url;
-          await new Promise((res) => {
-            imgObj.onload = res;
-            imgObj.onerror = res;
-          });
+        // Use loadedImages cache like prints.js does, not getAsset() which returns manifest definition
+        let imgObj = AssetManager.loadedImages.get(assetId);
+        if (!imgObj) {
+          // If not yet loaded, try to get from registry
+          const cachedObj = AssetManager.getAsset(assetId);
+          if (cachedObj && cachedObj.data instanceof Image) {
+            imgObj = cachedObj.data;
+          } else if (cachedObj && cachedObj.data) {
+            imgObj = cachedObj.data;
+          } else {
+            // If AssetManager has URL, construct Image element
+            const url = AssetManager.getUrl(assetId) || MASTER_SHEETS[key];
+            imgObj = new Image();
+            imgObj.src = url;
+            await new Promise((res) => {
+              imgObj.onload = res;
+              imgObj.onerror = res;
+            });
+          }
         }
         if (imgObj) {
           loadedImages.set(key, imgObj);

@@ -225,7 +225,7 @@
     },
     "piece.kokeshi": {
       "type": "programmatic",
-      "path": "/assets/models/characters/kokeshi/kokeshi.glb",
+      "implementationKey": "piece.kokeshi",
       "sourceType": "factory",
       "group": "piece.kokeshi",
       "platforms": [
@@ -242,7 +242,7 @@
     },
     "model.dice.bone": {
       "type": "programmatic",
-      "path": "/assets/models/props/dice/bone.glb",
+      "implementationKey": "model.dice.bone",
       "sourceType": "factory",
       "group": "model.dice",
       "platforms": [
@@ -259,7 +259,7 @@
     },
     "audio.sfx.dice-roll": {
       "type": "programmatic",
-      "path": "/assets/audio/sfx/dice-roll.ogg",
+      "implementationKey": "audio.sfx.dice-roll",
       "sourceType": "factory",
       "group": "audio.common",
       "platforms": [
@@ -277,7 +277,7 @@
     },
     "audio.sfx.wood-clack": {
       "type": "programmatic",
-      "path": "/assets/audio/sfx/wood-clack.ogg",
+      "implementationKey": "audio.sfx.wood-clack",
       "sourceType": "factory",
       "group": "audio.common",
       "platforms": [
@@ -295,7 +295,7 @@
     },
     "audio.bgm.tokaido": {
       "type": "programmatic",
-      "path": "/assets/audio/bgm/tokaido/shamisen-koto.mp3",
+      "implementationKey": "audio.bgm.tokaido",
       "sourceType": "factory",
       "group": "audio.bgm",
       "platforms": [
@@ -315,7 +315,7 @@
     },
     "audio.bgm.yokai": {
       "type": "programmatic",
-      "path": "/assets/audio/bgm/yokai/shamisen-koto.mp3",
+      "implementationKey": "audio.bgm.yokai",
       "sourceType": "factory",
       "group": "audio.bgm",
       "platforms": [
@@ -335,7 +335,7 @@
     },
     "audio.bgm.kesshu": {
       "type": "programmatic",
-      "path": "/assets/audio/bgm/kesshu/shamisen-koto.mp3",
+      "implementationKey": "audio.bgm.kesshu",
       "sourceType": "factory",
       "group": "audio.bgm",
       "platforms": [
@@ -355,7 +355,7 @@
     },
     "audio.bgm.genji": {
       "type": "programmatic",
-      "path": "/assets/audio/bgm/genji/shamisen-koto.mp3",
+      "implementationKey": "audio.bgm.genji",
       "sourceType": "factory",
       "group": "audio.bgm",
       "platforms": [
