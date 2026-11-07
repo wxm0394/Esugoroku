@@ -22,6 +22,9 @@ global.Image = global.Image || class {
   removeEventListener() {}
 };
 
+import * as THREE from 'three';
+global.THREE = THREE;
+
 import { AssetRegistryImpl } from '../assets/manifest/asset-registry.js';
 import { AssetManager } from '../assets/asset-manager.js';
 import { BrowserAssetAdapter } from '../assets/adapters/browser-asset-adapter.js';
@@ -80,34 +83,107 @@ async function runUnitTests() {
   // 4. Test Programmatic Asset Registry & Creation
   console.log('Test 4: Programmatic Asset Registry & Preloading (3D Models, SFX & BGM Themes)');
   assert.ok(registry.isProgrammatic('piece.kokeshi'), 'piece.kokeshi should be identified as programmatic');
+  assert.ok(registry.isProgrammatic('model.dice.bone'), 'model.dice.bone should be identified as programmatic');
   assert.ok(registry.isProgrammatic('audio.sfx.dice-roll'), 'audio.sfx.dice-roll should be identified as programmatic');
+  assert.ok(registry.isProgrammatic('audio.sfx.wood-clack'), 'audio.sfx.wood-clack should be identified as programmatic');
   assert.ok(registry.isProgrammatic('audio.bgm.tokaido'), 'audio.bgm.tokaido should be identified as programmatic');
+  assert.ok(registry.isProgrammatic('audio.bgm.yokai'), 'audio.bgm.yokai should be identified as programmatic');
+  assert.ok(registry.isProgrammatic('audio.bgm.kesshu'), 'audio.bgm.kesshu should be identified as programmatic');
   assert.ok(registry.isProgrammatic('audio.bgm.genji'), 'audio.bgm.genji should be identified as programmatic');
 
-  // Test 3D Kokeshi pawn factory resolution
-  const kokeshiAsset = await manager.preloadAsset('piece.kokeshi');
-  assert.ok(kokeshiAsset, 'Preloading piece.kokeshi should return generated programmatic asset object');
-  assert.equal(kokeshiAsset.id, 'piece.kokeshi', 'Programmatic asset ID should match');
-  assert.equal(kokeshiAsset.implementationKey, 'piece.kokeshi', 'Implementation key should match');
-  assert.ok(kokeshiAsset.factoryInfo && typeof kokeshiAsset.factoryInfo.create === 'function', 'Kokeshi pawn should expose create factory method');
-  const pawnInst = kokeshiAsset.factoryInfo.create(0, '#bf3426', '#f5dc98', '一');
-  assert.equal(pawnInst.kind, 'kokeshi-pawn', 'Created pawn should match kind kokeshi-pawn');
-  assert.equal(pawnInst.side, 0, 'Created pawn side should match');
-
-  // Test 3D Bone Dice factory resolution
+  // Test 3D Bone Dice real factory resolution
   const diceAsset = await manager.preloadAsset('model.dice.bone');
   assert.ok(diceAsset, 'Preloading model.dice.bone should return generated programmatic asset object');
   assert.ok(diceAsset.factoryInfo && typeof diceAsset.factoryInfo.create === 'function', 'Bone dice should expose create factory method');
-  const diceInst = diceAsset.factoryInfo.create();
+  const diceInst = diceAsset.factoryInfo.create({ enableShadow: true });
   assert.equal(diceInst.kind, 'bone-dice', 'Created dice should match kind bone-dice');
   assert.equal(diceInst.faces, 6, 'Created dice should have 6 faces');
+  assert.equal(diceInst.isThreeJSGroup, true, 'Created dice should flag isThreeJSGroup');
+  assert.ok(diceInst.group instanceof THREE.Group, 'Created dice group should be instance of THREE.Group');
+  assert.ok(diceInst.pickableMesh instanceof THREE.Mesh, 'Created dice pickableMesh should be instance of THREE.Mesh');
+  assert.equal(diceInst.group.children.length, 22, 'Created dice group should have 22 children (1 cube mesh + 21 spherical pips)');
+  assert.equal(diceInst.pickableMesh.userData.isDiceBowl, true, 'Pickable mesh userData should tag isDiceBowl');
 
-  // Test BGM theme resolution for all 4 themes
-  for (const boardId of ['tokaido', 'yokai', 'kesshu', 'genji']) {
-    const bgmAsset = await manager.preloadAsset(`audio.bgm.${boardId}`);
-    assert.ok(bgmAsset, `Preloading audio.bgm.${boardId} should succeed`);
-    assert.equal(bgmAsset.kind, 'webaudio-bgm', `BGM asset type should be webaudio-bgm`);
-    assert.ok(bgmAsset.factoryInfo, `BGM asset should have factoryInfo`);
+  // Detailed Bone Dice Geometry & Structure Test
+  const firstChild = diceInst.group.children[0];
+  assert.ok(firstChild instanceof THREE.Mesh, 'First child of dice group must be THREE.Mesh');
+  assert.ok(firstChild.geometry instanceof THREE.BoxGeometry, 'First child geometry must be THREE.BoxGeometry');
+  assert.strictEqual(firstChild, diceInst.pickableMesh, 'First child of group must be pickableMesh');
+  assert.ok(Array.isArray(firstChild.material), 'Cube mesh must have array of materials');
+  assert.equal(firstChild.material.length, 6, 'Cube mesh must have 6 face materials');
+
+  // Verify material face order metadata matches [2, 5, 1, 6, 3, 4]
+  const faceValues = firstChild.material.map(m => m.userData.faceValue);
+  assert.deepEqual(faceValues, [2, 5, 1, 6, 3, 4], 'Materials faceValue order must be [2, 5, 1, 6, 3, 4]');
+
+  // Verify remaining 21 children are all THREE.Mesh with SphereGeometry
+  for (let i = 1; i < diceInst.group.children.length; i++) {
+    const pipMesh = diceInst.group.children[i];
+    assert.ok(pipMesh instanceof THREE.Mesh, `Child #${i} must be THREE.Mesh`);
+    assert.ok(pipMesh.geometry instanceof THREE.SphereGeometry, `Child #${i} geometry must be THREE.SphereGeometry`);
+  }
+
+  // Verify textures and color spaces on face materials
+  for (const mat of firstChild.material) {
+    assert.ok(mat.map instanceof THREE.CanvasTexture, 'Material map must be THREE.CanvasTexture');
+    if (THREE.SRGBColorSpace) {
+      assert.equal(mat.map.colorSpace, THREE.SRGBColorSpace, 'Texture colorSpace must be SRGBColorSpace');
+    }
+  }
+
+  // Test Bone Dice Instance Independence
+  const diceInst1 = diceAsset.factoryInfo.create({ enableShadow: true });
+  const diceInst2 = diceAsset.factoryInfo.create({ enableShadow: false });
+
+  assert.notStrictEqual(diceInst1.group, diceInst2.group, 'Two dice groups must be distinct object references');
+  assert.notStrictEqual(diceInst1.pickableMesh, diceInst2.pickableMesh, 'Two pickableMeshes must be distinct object references');
+  assert.notStrictEqual(diceInst1.pickableMesh.geometry, diceInst2.pickableMesh.geometry, 'Two cube geometries must be distinct object references');
+  assert.notStrictEqual(diceInst1.pickableMesh.material, diceInst2.pickableMesh.material, 'Two material arrays must be distinct object references');
+  for (let m = 0; m < 6; m++) {
+    assert.notStrictEqual(diceInst1.pickableMesh.material[m], diceInst2.pickableMesh.material[m], `Face material #${m} must be distinct object reference`);
+  }
+
+  // Test position / rotation mutation independence
+  diceInst1.group.position.set(10, 20, 30);
+  diceInst1.group.rotation.set(1, 2, 3);
+  assert.notEqual(diceInst2.group.position.x, 10, 'Modifying position of die #1 must not affect die #2');
+  assert.notEqual(diceInst2.group.rotation.x, 1, 'Modifying rotation of die #1 must not affect die #2');
+
+  // Test explicit PROGRAMMATIC_ASSET_NOT_IMPLEMENTED error throwing & state isolation
+  const unimplementedAssetIds = [
+    'piece.kokeshi',
+    'audio.sfx.dice-roll',
+    'audio.sfx.wood-clack',
+    'audio.bgm.tokaido',
+    'audio.bgm.yokai',
+    'audio.bgm.kesshu',
+    'audio.bgm.genji',
+  ];
+
+  for (const assetId of unimplementedAssetIds) {
+    await assert.rejects(
+      async () => manager.preloadAsset(assetId),
+      (err) => {
+        assert.ok(
+          err.message.includes('PROGRAMMATIC_ASSET_NOT_IMPLEMENTED'),
+          `Error for ${assetId} should contain PROGRAMMATIC_ASSET_NOT_IMPLEMENTED, got: ${err.message}`
+        );
+        return true;
+      },
+      `Preloading ${assetId} should reject with PROGRAMMATIC_ASSET_NOT_IMPLEMENTED error`
+    );
+
+    // Verify failed asset is NOT stored in assetCache
+    assert.ok(!manager.assetCache.has(assetId), `Failed asset ${assetId} must NOT be written to assetCache`);
+    // Verify failed asset is NOT left in pendingLoads
+    assert.ok(!manager.pendingLoads.has(assetId), `Failed asset ${assetId} must NOT be left in pendingLoads`);
+
+    // Retry test: re-requesting after failure should cleanly throw again without hanging or stale state
+    await assert.rejects(
+      async () => manager.preloadAsset(assetId),
+      (err) => err.message.includes('PROGRAMMATIC_ASSET_NOT_IMPLEMENTED'),
+      `Re-requesting failed asset ${assetId} should cleanly throw PROGRAMMATIC_ASSET_NOT_IMPLEMENTED again`
+    );
   }
 
   // Test Programmatic Concurrency De-duplication (call preload 5 times concurrently, ensure resolver count = 1)
@@ -131,7 +207,7 @@ async function runUnitTests() {
   assert.equal(concurrentResults.length, 5, 'All 5 concurrent promises should resolve');
   assert.equal(concurrentResults[0], concurrentResults[4], 'All concurrent promises should resolve to identical instance');
 
-  assert.ok(manager.assetCache.has('piece.kokeshi'), 'Programmatic asset should be stored in assetCache');
+  assert.ok(manager.assetCache.has('model.dice.bone'), 'Programmatic asset model.dice.bone should be stored in assetCache');
   console.log('  ✅ Programmatic asset registry, 3D/Audio factories & concurrency de-duplication tests passed.');
 
   // 5. Test BrowserAssetAdapter URL joining logic

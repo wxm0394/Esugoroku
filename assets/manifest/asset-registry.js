@@ -3,6 +3,7 @@
 // 遵循 ASSET_SYSTEM_DESIGN.md 规范
 
 import manifestData from './asset-manifest.json' with { type: 'json' };
+import { createBoneDiceFactory } from '../../mobile/js/bone-dice-factory.js';
 
 export class AssetRegistryImpl {
   constructor(data) {
@@ -266,28 +267,7 @@ export class AssetRegistryImpl {
    * @returns {object}
    */
   _createKokeshiPawnResolver(registryEntry) {
-    return {
-      id: registryEntry.id,
-      type: registryEntry.type,
-      isProgrammatic: true,
-      implementationKey: registryEntry.implementationKey,
-      kind: '3d-pawn',
-      factoryInfo: {
-        create: (side, primaryHex, accentHex, labelText) => {
-          // In real Three.js environment, this would call createKokeshiPawn
-          // For Node/mock, return structured pawn definition
-          return {
-            kind: 'kokeshi-pawn',
-            side,
-            primaryHex,
-            accentHex,
-            labelText,
-            parts: 8,
-            isThreeJSGroup: typeof THREE !== 'undefined'
-          };
-        }
-      }
-    };
+    throw new Error("PROGRAMMATIC_ASSET_NOT_IMPLEMENTED: piece.kokeshi - Kokeshi pawn creation is not implemented in this runtime environment. Use a Three.js-based implementation or provide a custom resolver.");
   }
 
   /**
@@ -301,15 +281,16 @@ export class AssetRegistryImpl {
       type: registryEntry.type,
       isProgrammatic: true,
       implementationKey: registryEntry.implementationKey,
-      kind: '3d-dice',
+      kind: "3d-dice",
       factoryInfo: {
-        create: () => {
-          // In real Three.js environment, this would create bone dice mesh + pips
-          // For Node/mock, return structured dice definition
+        create: (options = {}) => {
+          const { group, pickableMesh } = createBoneDiceFactory(options);
           return {
-            kind: 'bone-dice',
+            kind: "bone-dice",
             faces: 6,
-            isThreeJSGroup: typeof THREE !== 'undefined'
+            isThreeJSGroup: true,
+            group,
+            pickableMesh
           };
         }
       }
@@ -317,78 +298,31 @@ export class AssetRegistryImpl {
   }
 
   /**
-   * Default resolver for dice roll SFX - returns audio buffer info
+   * Default resolver for dice roll SFX
    * @param {object} registryEntry
    * @returns {object}
    */
   _createDiceRollResolver(registryEntry) {
-    return {
-      id: registryEntry.id,
-      type: registryEntry.type,
-      isProgrammatic: true,
-      implementationKey: registryEntry.implementationKey,
-      kind: 'webaudio-sfx',
-      factoryInfo: {
-        play: () => {
-          // In real WebAudio environment, this would call audio.throwDie()
-          // For Node/mock, return structured SFX definition
-          return {
-            kind: 'dice-roll', type: 'webaudio-sfx', playable: true
-          };
-        }
-      }
-    };
+    throw new Error("PROGRAMMATIC_ASSET_NOT_IMPLEMENTED: audio.sfx.dice-roll - Dice roll SFX creation is not implemented in this runtime environment.");
   }
 
   /**
-   * Default resolver for wood clack SFX - returns audio buffer info
+   * Default resolver for wood clack SFX
    * @param {object} registryEntry
    * @returns {object}
    */
   _createWoodClackResolver(registryEntry) {
-    return {
-      id: registryEntry.id,
-      type: registryEntry.type,
-      isProgrammatic: true,
-      implementationKey: registryEntry.implementationKey,
-      kind: 'webaudio-sfx',
-      factoryInfo: {
-        play: () => {
-          // In real WebAudio environment, this would call audio.woodClack()
-          // For Node/mock, return structured SFX definition
-          return {
-            kind: 'wood-clack', type: 'webaudio-sfx', playable: true
-          };
-        }
-      }
-    };
+    throw new Error("PROGRAMMATIC_ASSET_NOT_IMPLEMENTED: audio.sfx.wood-clack - Wood clack SFX creation is not implemented in this runtime environment.");
   }
 
   /**
-   * Default resolver for BGM theme - returns BGM theme definition
+   * Default resolver for BGM theme
    * @param {object} registryEntry
    * @param {string} boardId
    * @returns {object}
    */
   _createBgmThemeResolver(registryEntry, boardId) {
-    // Import BGM themes from audio.js
-    const { BGM_THEMES, getBgmTheme } = globalThis.__esugorokuAudio || {};
-    const theme = (BGM_THEMES && BGM_THEMES[boardId]) || (getBgmTheme && getBgmTheme(boardId)) || { id: boardId };
-    return {
-      id: registryEntry.id,
-      type: registryEntry.type,
-      isProgrammatic: true,
-      implementationKey: registryEntry.implementationKey,
-      kind: 'webaudio-bgm',
-      factoryInfo: {
-        theme,
-        getTheme: () => theme,
-        computeStepNotes: (stepIndex = 0) => {
-          // In real environment, this would call computeBgmStepNotes
-          return { themeId: boardId, step: stepIndex };
-        }
-      }
-    };
+    throw new Error(`PROGRAMMATIC_ASSET_NOT_IMPLEMENTED: audio.bgm.${boardId} - BGM theme creation is not implemented in this runtime environment. Use a WebAudio-based implementation or provide a custom resolver.`);
   }
 }
 

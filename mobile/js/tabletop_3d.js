@@ -11,6 +11,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { BOARDS } from './boards.js';
 import { EsugorokuCore, computeDieTargetEulerYXZ, DIE_LOCAL_NORMALS } from './core.js';
 import { G, currentBoard } from './state.js';
+import { createBoneDiceFactory } from './bone-dice-factory.js';
 import { create3DTileCanvas, createBoardBroadsheetCanvas, preloadUkiyoeSheets, UKIYOE_INK } from './nishikie_woodblock.js';
 
 const SCALE = 0.048; // 800x640 logical board -> 38.4 x 30.72 world units (large grand tabletop)
@@ -50,69 +51,6 @@ export function nodeWorldCenter(node) {
 export function getDieFaceUpEuler(value, yaw = 0) {
   const t = computeDieTargetEulerYXZ(value, yaw);
   return new THREE.Euler(t.rx, t.ry, t.rz, 'YXZ');
-}
-
-function createDieFaceTexture(faceValue) {
-  const size = 256;
-  const c = document.createElement('canvas');
-  c.width = size;
-  c.height = size;
-  const ctx = c.getContext('2d');
-
-  // Warm carved bone/ivory surface with subtle bevel frame
-  const g = ctx.createRadialGradient(size * 0.4, size * 0.38, 12, size * 0.5, size * 0.5, size * 0.72);
-  g.addColorStop(0, '#fffdf6');
-  g.addColorStop(0.7, '#f5ebd1');
-  g.addColorStop(1, '#d8c398');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, size, size);
-
-  ctx.strokeStyle = '#8c6f41';
-  ctx.lineWidth = 10;
-  ctx.strokeRect(5, 5, size - 10, size - 10);
-
-  // Pip layout in normalized [0..1] coordinates
-  const layouts = {
-    1: [[0.5, 0.5]],
-    2: [[0.28, 0.28], [0.72, 0.72]],
-    3: [[0.26, 0.26], [0.5, 0.5], [0.74, 0.74]],
-    4: [[0.28, 0.28], [0.72, 0.28], [0.28, 0.72], [0.72, 0.72]],
-    5: [[0.26, 0.26], [0.74, 0.26], [0.5, 0.5], [0.26, 0.74], [0.74, 0.74]],
-    6: [[0.28, 0.24], [0.72, 0.24], [0.28, 0.5], [0.72, 0.5], [0.28, 0.76], [0.72, 0.76]],
-  };
-
-  const pips = layouts[faceValue] || layouts[1];
-  for (const [px, py] of pips) {
-    const cx = px * size;
-    const cy = py * size;
-    const r = faceValue === 1 ? size * 0.175 : size * 0.095;
-
-    // Recessed shadow rim
-    ctx.fillStyle = 'rgba(40,24,12,0.28)';
-    ctx.beginPath();
-    ctx.arc(cx + 2, cy + 3, r * 1.06, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Main pip pigment (Traditional Japanese Sai: 1 is large Vermilion, 2-6 are Sumi ink)
-    const pg = ctx.createRadialGradient(cx - r * 0.25, cy - r * 0.25, r * 0.1, cx, cy, r);
-    if (faceValue === 1) {
-      pg.addColorStop(0, '#ee4635');
-      pg.addColorStop(0.65, '#c42416');
-      pg.addColorStop(1, '#7a1108');
-    } else {
-      pg.addColorStop(0, '#3a2d24');
-      pg.addColorStop(0.6, '#18120e');
-      pg.addColorStop(1, '#090705');
-    }
-    ctx.fillStyle = pg;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
 }
 
 function createTextSprite(text, bgColor = '#bf3426', borderColor = '#f5dc98', scaleW = 2.6, scaleH = 0.85) {
@@ -1179,67 +1117,11 @@ export class Tabletop3D {
     };
     this.bowlShockRings = [];
 
-    // True 3D Bone Die (Composite Group: 6 textured faces + 3D recessed spherical pips)
-    // BoxGeometry material order: [+X (2), -X (5), +Y (1), -Y (6), +Z (3), -Z (4)]
-    const faceOrder = [2, 5, 1, 6, 3, 4];
-    const materials = faceOrder.map(val => new THREE.MeshStandardMaterial({
-      map: createDieFaceTexture(val),
-      emissive: '#3d2f1d',
-      emissiveIntensity: 0.18,
-      roughness: 0.24,
-      metalness: 0.05,
-    }));
-
+    // True 3D Bone Die created from Bone Dice Factory
     const dieSize = 1.68;
-    const dieGroup = new THREE.Group();
-    const cubeMesh = new THREE.Mesh(new THREE.BoxGeometry(dieSize, dieSize, dieSize), materials);
-    cubeMesh.castShadow = !this.isSoftwareGl;
-    cubeMesh.receiveShadow = true;
-    cubeMesh.userData.isDiceBowl = true;
-    dieGroup.add(cubeMesh);
-    this.pickableMeshes.push(cubeMesh);
-
-    // Add 3D inset spherical pips on all 6 faces so they are true 3D geometry attached to the cube
-    const pipLayouts = {
-      1: [[0, 0]],
-      2: [[-0.22, -0.22], [0.22, 0.22]],
-      3: [[-0.24, -0.24], [0, 0], [0.24, 0.24]],
-      4: [[-0.22, -0.22], [0.22, -0.22], [-0.22, 0.22], [0.22, 0.22]],
-      5: [[-0.24, -0.24], [0.24, -0.24], [0, 0], [-0.24, 0.24], [0.24, 0.24]],
-      6: [[-0.22, -0.26], [0.22, -0.26], [-0.22, 0], [0.22, 0], [-0.22, 0.26], [0.22, 0.26]],
-    };
-    const redPipMat = new THREE.MeshStandardMaterial({
-      color: '#d92314',
-      emissive: '#5a0d06',
-      emissiveIntensity: 0.25,
-      roughness: 0.22,
-    });
-    const blackPipMat = new THREE.MeshStandardMaterial({
-      color: '#110c09',
-      roughness: 0.28,
-    });
     const half = dieSize * 0.5;
-
-    const addFacePips = (val, normalAxis, sign) => {
-      const coords = pipLayouts[val];
-      const r = val === 1 ? dieSize * 0.135 : dieSize * 0.076;
-      const geo = new THREE.SphereGeometry(r, 14, 10);
-      const mat = val === 1 ? redPipMat : blackPipMat;
-      for (const [u, v] of coords) {
-        const pip = new THREE.Mesh(geo, mat);
-        const offset = (half - r * 0.65) * sign;
-        if (normalAxis === 'y') pip.position.set(u * dieSize, offset, v * dieSize);
-        else if (normalAxis === 'x') pip.position.set(offset, v * dieSize, u * dieSize);
-        else pip.position.set(u * dieSize, v * dieSize, offset);
-        dieGroup.add(pip);
-      }
-    };
-    addFacePips(1, 'y', 1);
-    addFacePips(6, 'y', -1);
-    addFacePips(2, 'x', 1);
-    addFacePips(5, 'x', -1);
-    addFacePips(3, 'z', 1);
-    addFacePips(4, 'z', -1);
+    const { group: dieGroup, pickableMesh: cubeMesh } = createBoneDiceFactory({ enableShadow: !this.isSoftwareGl });
+    this.pickableMeshes.push(cubeMesh);
 
     // Settled Die Golden Ring Halo on the Crimson Bowl Pad (surrounding the die without covering it)
     this.dieSettleHaloMat = new THREE.MeshBasicMaterial({
