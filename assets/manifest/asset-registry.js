@@ -6,13 +6,21 @@ import manifestData from './asset-manifest.json' with { type: 'json' };
 
 export class AssetRegistryImpl {
   constructor(data) {
-    this.manifest = data || manifestData;
     this.assetsMap = new Map();
     this.groupsMap = new Map();
-    this.init();
+    this.init(data);
   }
 
-  init() {
+  init(data = null) {
+    if (data) {
+      this.manifest = data;
+    } else if (!this.manifest) {
+      this.manifest = manifestData;
+    }
+
+    this.assetsMap.clear();
+    this.groupsMap.clear();
+
     if (!this.manifest || !this.manifest.assets) {
       console.error('AssetRegistry: Invalid manifest data.');
       return;

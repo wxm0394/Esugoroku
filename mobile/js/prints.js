@@ -36,6 +36,10 @@ export function getAssetId(boardId, art) {
 
 // Resolve by board id + art key. Returns an HTMLImageElement | null.
 export function getPrint(boardId, art) {
+  const id = getAssetId(boardId, art);
+  const loaded = AssetManager.loadedImages.get(id);
+  if (loaded) return loaded;
+
   const src = getPrintURL(boardId, art);
   if (!src) return null;
   const entry = cache.get(src);
@@ -53,33 +57,46 @@ export function getPrintURL(boardId, art) {
 }
 
 export function getCharmPrint(charmId) {
+  const id = `charm.${charmId}`;
+  const loaded = AssetManager.loadedImages.get(id);
+  if (loaded) return loaded;
+
   const src = getPrintURL('charms', charmId);
   return src ? cache.get(src) || null : null;
 }
 
-// Kick off loading immediately so textures are decoded before first paint.
+// Kick off loading immediately through AssetManager so textures are preloaded and cached.
 export function loadAllPrints() {
-  const urls = [];
+  const assetIds = [];
   for (const boardId of ['tokaido', 'yokai', 'kesshu', 'genji']) {
     const table = PRINT_ASSETS[boardId];
     if (table) {
       for (const artKey of Object.keys(table)) {
-        const url = getPrintURL(boardId, artKey);
-        if (url) urls.push(url);
+        assetIds.push(getAssetId(boardId, artKey));
       }
     }
   }
   const charmTable = PRINT_ASSETS.charms;
   if (charmTable) {
     for (const charmKey of Object.keys(charmTable)) {
-      const url = getPrintURL('charms', charmKey);
-      if (url) urls.push(url);
+      assetIds.push(getAssetId('charms', charmKey));
     }
   }
-  return Promise.all(urls.map(load));
+
+  // Preload via AssetManager for all registered prints, with direct URL fallback loader as backup
+  return Promise.all(assetIds.map(async (id) => {
+    await AssetManager.preloadAsset(id);
+    const loaded = AssetManager.loadedImages.get(id);
+    if (loaded) return loaded;
+    const url = AssetManager.getUrl(id);
+    if (url) return load(url);
+    return null;
+  }));
 }
 
 export function isPrintLoaded(boardId, art) {
+  const id = getAssetId(boardId, art);
+  if (AssetManager.loadedImages.has(id)) return true;
   const url = getPrintURL(boardId, art);
   return url ? cache.has(url) : false;
 }

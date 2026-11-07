@@ -5,6 +5,21 @@
 export class BrowserAssetAdapter {
   constructor(options = {}) {
     this.baseUrl = options.baseUrl || '';
+    this._audioContext = null;
+  }
+
+  /**
+   * 获取或创建共享 AudioContext
+   */
+  getAudioContext() {
+    if (!this._audioContext && typeof window !== 'undefined') {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        this._audioContext = new AudioCtx();
+        this._audioContext.resume().catch(() => {});
+      }
+    }
+    return this._audioContext;
   }
 
   /**
@@ -56,7 +71,10 @@ export class BrowserAssetAdapter {
       throw new Error(`HTTP error ${response.status} while fetching audio from "${url}"`);
     }
     const arrayBuffer = await response.arrayBuffer();
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioCtx = this.getAudioContext();
+    if (!audioCtx) {
+      throw new Error('WebAudio AudioContext is not available');
+    }
     return await audioCtx.decodeAudioData(arrayBuffer);
   }
 

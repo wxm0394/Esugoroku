@@ -3,6 +3,7 @@
 // 遵循 ASSET_SYSTEM_DESIGN.md 规范
 
 import { AssetRegistry } from './manifest/asset-registry.js';
+import { BrowserAssetAdapter } from './adapters/browser-asset-adapter.js';
 
 /**
  * AssetManager 类
@@ -23,8 +24,25 @@ export class AssetManager {
     this.loadedImages = new Map(); // Image 元素缓存
     this.loadedAudio = new Map();  // AudioBuffer 或 HTMLAudioElement 缓存
     this.pendingLoads = new Map(); // 正在加载中的 Promise 缓存 (de-duplication)
+    this.sharedAudioCtx = null;   // 共享 AudioContext 实例
     this.loadStrategy = 'lazy';   // 默认懒加载
     this.currentPlatform = this.detectPlatform();
+  }
+
+  /**
+   * 获取或创建共享 AudioContext
+   */
+  getAudioContext() {
+    if (this.adapter && typeof this.adapter.getAudioContext === 'function') {
+      return this.adapter.getAudioContext();
+    }
+    if (!this.sharedAudioCtx && typeof window !== 'undefined') {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        this.sharedAudioCtx = new AudioCtx();
+      }
+    }
+    return this.sharedAudioCtx;
   }
 
   /**
@@ -110,20 +128,29 @@ export class AssetManager {
       return;
     }
 
-    const url = this.getUrl(id);
-    const type = asset.type;
-
-    // Mark this load as pending before starting
-    const loadPromise = new Promise(async (resolve, reject) => {
+    const loadPromise = (async () => {
+      const url = this.getUrl(id);
+      const type = asset.type;
       try {
-        switch (type) {
-          case 'image': {
-            const img = this.loadedImages.get(id);
-            if (img) {
-              resolve(img);
-              return;
+        if (type === 'image') {
+          if (this.adapter && typeof this.adapter.loadImage === 'function') {
+            try {
+              const img = await this.adapter.loadImage(url);
+              this.loadedImages.set(id, img);
+              return img;
+            } catch (err) {
+              console.error(`AssetManager: Adapter failed to load image "${id}"`, err);
+              const fallbackUrl = this.getFallbackUrl(id, 'image');
+              const fallbackImg = typeof Image !== 'undefined' ? new Image() : null;
+              if (fallbackImg) fallbackImg.src = fallbackUrl;
+              this.loadedImages.set(id, fallbackImg);
+              return fallbackImg;
             }
+          }
 
+          if (typeof Image === 'undefined') return null;
+
+          return await new Promise((resolve) => {
             const image = new Image();
             image.onload = () => {
               this.loadedImages.set(id, image);
@@ -131,48 +158,47 @@ export class AssetManager {
             };
             image.onerror = (err) => {
               console.error(`AssetManager: Failed to load image "${id}"`, err);
-              // 尝试回退到默认占位图
               const fallbackUrl = this.getFallbackUrl(id, 'image');
               image.src = fallbackUrl;
               resolve(image);
             };
             image.src = url;
-            await image.decode ? image.decode() : Promise.resolve();
-            resolve(image);
-            break;
-          }
-
-          case 'audio': {
-            const audio = this.loadedAudio.get(id);
-            if (audio) {
-              resolve(audio);
-              return;
+          });
+        } else if (type === 'audio') {
+          if (this.adapter && typeof this.adapter.loadAudio === 'function') {
+            try {
+              const buffer = await this.adapter.loadAudio(url);
+              const audioObj = { context: this.getAudioContext(), buffer };
+              this.loadedAudio.set(id, audioObj);
+              return audioObj;
+            } catch (err) {
+              console.error(`AssetManager: Adapter failed to load audio "${id}"`, err);
+              return null;
             }
-
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const response = await fetch(url);
-            const arrayBuffer = await response.arrayBuffer();
-            const buffer = await audioCtx.decodeAudioData(arrayBuffer);
-            this.loadedAudio.set(id, { context: audioCtx, buffer });
-            resolve({ context: audioCtx, buffer });
-            break;
           }
 
-          default:
-            console.warn(`AssetManager: Preload type "${type}" not fully supported yet.`);
-            resolve(null);
+          const audioCtx = this.getAudioContext() || (typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext) ? new (window.AudioContext || window.webkitAudioContext)() : null);
+          if (!audioCtx) return null;
+          const response = await fetch(url);
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = await audioCtx.decodeAudioData(arrayBuffer);
+          const audioObj = { context: audioCtx, buffer };
+          this.loadedAudio.set(id, audioObj);
+          return audioObj;
+        } else {
+          console.warn(`AssetManager: Preload type "${type}" not fully supported yet.`);
+          return null;
         }
       } catch (err) {
         console.error(`AssetManager: Failed to preload "${id}"`, err);
-        resolve(null);
+        return null;
       } finally {
-        // Remove from pending loads after completion
         this.pendingLoads.delete(id);
       }
-    });
+    })();
 
     this.pendingLoads.set(id, loadPromise);
-    await loadPromise;
+    return await loadPromise;
   }
 
   /**
@@ -204,17 +230,17 @@ export class AssetManager {
       return;
     }
 
-    const audioInfo = this.loadedAudio.get(id);
+    let audioInfo = this.loadedAudio.get(id);
     if (!audioInfo || !audioInfo.buffer) {
       await this.preloadAsset(id);
-      const newAudioInfo = this.loadedAudio.get(id);
-      if (!newAudioInfo || !newAudioInfo.buffer) {
+      audioInfo = this.loadedAudio.get(id);
+      if (!audioInfo || !audioInfo.buffer) {
         console.error(`AssetManager: Audio "${id}" not available after preload.`);
         return;
       }
     }
 
-    const ctx = audioInfo.context;
+    const ctx = audioInfo.context || this.getAudioContext();
     if (ctx && ctx.state === "suspended") {
       try {
         await ctx.resume();
@@ -222,6 +248,9 @@ export class AssetManager {
         console.warn(`AssetManager: Could not resume AudioContext for "${id}":`, err);
       }
     }
+
+    if (!ctx) return;
+
     const gainNode = ctx.createGain();
     gainNode.gain.value = options.volume !== undefined ? options.volume : 0.48;
 
@@ -231,7 +260,6 @@ export class AssetManager {
     gainNode.connect(ctx.destination);
     source.start(0);
 
-    // 如果是循环
     if (options.loop) {
       source.loop = true;
     }
@@ -268,15 +296,15 @@ export class AssetManager {
    * @returns {string} fallback URL
    */
   getFallbackUrl(id, type) {
-   const fallbacks = {
-     image: 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%221%22%20height%3D%221%22%3E%3C%3C%3E%3E%3C%2Fsvg%3E',
-     audio: 'data:audio/wav;base64,UklGRl9AAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRh',
-     model: 'data:model/gltf+json;base64,',
-     font: 'serif'
-   };
+    const fallbacks = {
+      image: 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%221%22%20height%3D%221%22%3E%3C%2Fsvg%3E',
+      audio: 'data:audio/wav;base64,UklGRl9AAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRh',
+      model: 'data:model/gltf+json;base64,',
+      font: 'serif'
+    };
 
-   return (fallbacks[type] || fallbacks.image);
- }
+    return (fallbacks[type] || fallbacks.image);
+  }
 
   /**
    * 获取当前加载统计报告

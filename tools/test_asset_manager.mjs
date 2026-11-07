@@ -8,7 +8,16 @@ import { fileURLToPath } from 'url';
 
 // Mock Image for Node.js environment before importing AssetManager
 global.Image = global.Image || class {
-  constructor(src) { this.src = src; this.onload = null; this.onerror = null; this.width = 100; this.height = 100; }
+  constructor(src) {
+    this._src = src || '';
+    this.width = 100;
+    this.height = 100;
+  }
+  set src(val) {
+    this._src = val;
+    setTimeout(() => { if (this.onload) this.onload(); }, 0);
+  }
+  get src() { return this._src; }
   addEventListener() {}
   removeEventListener() {}
 };
