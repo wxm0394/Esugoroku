@@ -48,6 +48,14 @@
           "path": {
             "type": "string"
           },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "physical",
+              "factory",
+              "procedural"
+            ]
+          },
           "group": {
             "type": "string"
           },

@@ -224,8 +224,9 @@
       }
     },
     "piece.kokeshi": {
-      "type": "model",
+      "type": "programmatic",
       "path": "/assets/models/characters/kokeshi/kokeshi.glb",
+      "sourceType": "factory",
       "group": "piece.kokeshi",
       "platforms": [
         "web",
@@ -240,8 +241,9 @@
       }
     },
     "model.dice.bone": {
-      "type": "model",
+      "type": "programmatic",
       "path": "/assets/models/props/dice/bone.glb",
+      "sourceType": "factory",
       "group": "model.dice",
       "platforms": [
         "web",
@@ -256,8 +258,9 @@
       }
     },
     "audio.sfx.dice-roll": {
-      "type": "audio",
+      "type": "programmatic",
       "path": "/assets/audio/sfx/dice-roll.ogg",
+      "sourceType": "factory",
       "group": "audio.common",
       "platforms": [
         "web",
@@ -273,8 +276,9 @@
       }
     },
     "audio.sfx.wood-clack": {
-      "type": "audio",
+      "type": "programmatic",
       "path": "/assets/audio/sfx/wood-clack.ogg",
+      "sourceType": "factory",
       "group": "audio.common",
       "platforms": [
         "web",
@@ -290,8 +294,9 @@
       }
     },
     "audio.bgm.tokaido": {
-      "type": "audio",
+      "type": "programmatic",
       "path": "/assets/audio/bgm/tokaido/shamisen-koto.mp3",
+      "sourceType": "factory",
       "group": "audio.bgm",
       "platforms": [
         "web",
@@ -309,8 +314,9 @@
       }
     },
     "audio.bgm.yokai": {
-      "type": "audio",
+      "type": "programmatic",
       "path": "/assets/audio/bgm/yokai/shamisen-koto.mp3",
+      "sourceType": "factory",
       "group": "audio.bgm",
       "platforms": [
         "web",
@@ -328,8 +334,9 @@
       }
     },
     "audio.bgm.kesshu": {
-      "type": "audio",
+      "type": "programmatic",
       "path": "/assets/audio/bgm/kesshu/shamisen-koto.mp3",
+      "sourceType": "factory",
       "group": "audio.bgm",
       "platforms": [
         "web",
@@ -347,8 +354,9 @@
       }
     },
     "audio.bgm.genji": {
-      "type": "audio",
+      "type": "programmatic",
       "path": "/assets/audio/bgm/genji/shamisen-koto.mp3",
+      "sourceType": "factory",
       "group": "audio.bgm",
       "platforms": [
         "web",
@@ -383,7 +391,7 @@
     },
     "font.shippori-mincho": {
       "type": "font",
-      "path": "/assets/fonts/shipporiminchob1_001.woff2",
+      "path": "/assets/fonts/shipporiminchob1_001_wXK1E2wCr44tulPdnn-xbIpJ9RgT9-nKLoxP2xCx5m9m2kVb449GP2pukmm_jQafeeM.0.woff2",
       "group": "font.shippori-mincho",
       "platforms": [
         "web"

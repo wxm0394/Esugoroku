@@ -24,6 +24,7 @@ global.Image = global.Image || class {
 
 import { AssetRegistryImpl } from '../assets/manifest/asset-registry.js';
 import { AssetManager } from '../assets/asset-manager.js';
+import { BrowserAssetAdapter } from '../assets/adapters/browser-asset-adapter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,6 +76,29 @@ async function runUnitTests() {
   assert.ok(manager.pendingLoads.size === 0, 'pendingLoads should be cleared after preload completes');
 
   console.log('  ✅ Request de-duplication tests passed.');
+
+  // 4. Test Programmatic Asset Registry & Creation
+  console.log('Test 4: Programmatic Asset Registry & Preloading');
+  assert.ok(registry.isProgrammatic('piece.kokeshi'), 'piece.kokeshi should be identified as programmatic');
+  assert.ok(registry.isProgrammatic('audio.sfx.dice-roll'), 'audio.sfx.dice-roll should be identified as programmatic');
+
+  const kokeshiAsset = await manager.preloadAsset('piece.kokeshi');
+  assert.ok(kokeshiAsset, 'Preloading piece.kokeshi should return generated programmatic asset object');
+  assert.equal(kokeshiAsset.id, 'piece.kokeshi', 'Programmatic asset ID should match');
+  assert.equal(kokeshiAsset.type, 'programmatic', 'Programmatic asset type should be programmatic');
+  assert.ok(manager.assetCache.has('piece.kokeshi'), 'Programmatic asset should be stored in assetCache');
+  console.log('  ✅ Programmatic asset registry & preloading tests passed.');
+
+  // 5. Test BrowserAssetAdapter URL joining logic
+  console.log('Test 5: BrowserAssetAdapter URL joining & protocol preservation');
+  const adapterWithBase = new BrowserAssetAdapter({ baseUrl: 'http://localhost:8080' });
+  const joinedUrl = adapterWithBase.toLoadUrl('assets/prints/tokaido_nihonbashi.webp');
+  assert.equal(joinedUrl, 'http://localhost:8080/assets/prints/tokaido_nihonbashi.webp', 'URL join should maintain http:// scheme');
+
+  const dataUrl = adapterWithBase.toLoadUrl('data:image/svg+xml;utf8,<svg></svg>');
+  assert.equal(dataUrl, 'data:image/svg+xml;utf8,<svg></svg>', 'data URI should be returned as-is');
+
+  console.log('  ✅ BrowserAssetAdapter URL joining tests passed.');
 
   console.log('\n✅ All AssetManager & AssetRegistry unit tests PASSED successfully.');
 }

@@ -119,13 +119,26 @@ export class AssetManager {
    */
   async preloadAsset(id) {
     // De-duplication: if already loaded or already loading, return cached/promise
-    if (this.loadedImages.has(id) || this.loadedAudio.has(id)) return;
+    if (this.loadedImages.has(id)) return this.loadedImages.get(id);
+    if (this.loadedAudio.has(id)) return this.loadedAudio.get(id);
+    if (this.assetCache.has(id)) return this.assetCache.get(id);
     if (this.pendingLoads.has(id)) return await this.pendingLoads.get(id);
 
     const asset = this.getAsset(id);
     if (!asset) {
       console.warn(`AssetManager: Cannot preload "${id}" — not found in manifest.`);
-      return;
+      return null;
+    }
+
+    // Handle programmatic / factory assets
+    const isProg = (this.registry && typeof this.registry.isProgrammatic === 'function') &&
+                   (this.registry.isProgrammatic(id) || asset.sourceType === 'factory');
+    if (isProg && typeof this.registry.createProgrammaticAsset === 'function') {
+      const progAsset = await this.registry.createProgrammaticAsset(id);
+      if (progAsset) {
+        this.assetCache.set(id, progAsset);
+        return progAsset;
+      }
     }
 
     const loadPromise = (async () => {
@@ -141,8 +154,11 @@ export class AssetManager {
             } catch (err) {
               console.error(`AssetManager: Adapter failed to load image "${id}"`, err);
               const fallbackUrl = this.getFallbackUrl(id, 'image');
-              const fallbackImg = typeof Image !== 'undefined' ? new Image() : null;
-              if (fallbackImg) fallbackImg.src = fallbackUrl;
+              let fallbackImg = null;
+              if (typeof Image !== 'undefined') {
+                fallbackImg = new Image();
+                fallbackImg.src = fallbackUrl;
+              }
               this.loadedImages.set(id, fallbackImg);
               return fallbackImg;
             }
@@ -160,6 +176,7 @@ export class AssetManager {
               console.error(`AssetManager: Failed to load image "${id}"`, err);
               const fallbackUrl = this.getFallbackUrl(id, 'image');
               image.src = fallbackUrl;
+              this.loadedImages.set(id, image);
               resolve(image);
             };
             image.src = url;

@@ -112,25 +112,6 @@ function runValidation() {
       }
     }
 
-    // Secondary prefix match check for webfont chunks or synthetic assets
-    if (!found) {
-      for (const cand of candidates) {
-        const dir = path.dirname(cand);
-        const baseName = path.basename(cand, path.extname(cand));
-        if (fs.existsSync(dir)) {
-          try {
-            const files = fs.readdirSync(dir);
-            const match = files.find(f => f.startsWith(baseName));
-            if (match) {
-              targetPath = path.join(dir, match);
-              found = true;
-              break;
-            }
-          } catch {}
-        }
-      }
-    }
-
     if (found) {
       existCount++;
 

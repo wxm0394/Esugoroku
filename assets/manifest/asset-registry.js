@@ -8,6 +8,7 @@ export class AssetRegistryImpl {
   constructor(data) {
     this.assetsMap = new Map();
     this.groupsMap = new Map();
+    this.programmaticRegistry = new Map(); // Programmatic Factory Registry
     this.init(data);
   }
 
@@ -20,6 +21,7 @@ export class AssetRegistryImpl {
 
     this.assetsMap.clear();
     this.groupsMap.clear();
+    this.programmaticRegistry.clear();
 
     if (!this.manifest || !this.manifest.assets) {
       console.error('AssetRegistry: Invalid manifest data.');
@@ -29,6 +31,14 @@ export class AssetRegistryImpl {
     // 填充 assetsMap
     for (const [id, asset] of Object.entries(this.manifest.assets)) {
       this.assetsMap.set(id, { id, ...asset });
+      // Register programmatic assets in the factory registry
+      if (asset.type === 'programmatic' && asset.sourceType) {
+        this.programmaticRegistry.set(id, {
+          type: asset.sourceType,
+          path: asset.path,
+          factory: this._createProgrammaticAsset.bind(this, id)
+        });
+      }
     }
 
     // 填充 groupsMap
@@ -130,6 +140,76 @@ export class AssetRegistryImpl {
     return {
       valid: errors.length === 0,
       errors
+    };
+  }
+
+  /**
+   * Programmatic Factory Registry: Get programmatic asset definition
+   * @param {string} id - Asset ID
+   * @returns {object|null}
+   */
+  getProgrammaticAsset(id) {
+    return this.programmaticRegistry.get(id) || null;
+  }
+
+  /**
+   * Programmatic Factory Registry: Check if asset is programmatic
+   * @param {string} id - Asset ID
+   * @returns {boolean}
+   */
+  isProgrammatic(id) {
+    const asset = this.assetsMap.get(id);
+    return asset && asset.type === 'programmatic';
+  }
+
+  /**
+   * Programmatic Factory Registry: Create/load a programmatic asset instance
+   * @param {string} id - Asset ID
+   * @returns {Promise<object>} - Asset instance (HTMLImageElement, AudioBuffer, etc.)
+   */
+  async createProgrammaticAsset(id) {
+    const registryEntry = this.programmaticRegistry.get(id);
+    if (!registryEntry) {
+      throw new Error(`Asset "${id}" is not a programmatic asset or not registered in factory registry.`);
+    }
+
+    // Different factory methods based on sourceType
+    switch (registryEntry.type) {
+      case 'factory':
+        return registryEntry.factory();
+      case 'procedural':
+        return registryEntry.factory();
+      default:
+        throw new Error(`Unknown programmatic source type: ${registryEntry.type}`);
+    }
+  }
+
+  /**
+   * Internal factory method for kokeshi pawn model
+   * @param {string} id
+   * @returns {Promise<object>}
+   */
+  async _createProgrammaticAsset(id) {
+    const assetDef = this.assetsMap.get(id);
+    if (!assetDef) {
+      throw new Error(`Asset "${id}" not found in manifest.`);
+    }
+
+    // Return a placeholder/proxy for the programmatic asset
+    // In a real implementation, this would create Three.js models, WebAudio buffers, etc.
+    return {
+      id,
+      type: assetDef.type,
+      isProgrammatic: true,
+      path: assetDef.path,
+      metadata: assetDef.metadata,
+      // Placeholder - actual creation would happen in the renderer/audio system
+      instance: null,
+      load: async () => {
+        // Simulate async loading
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return { success: true };
+      }
     };
   }
 }

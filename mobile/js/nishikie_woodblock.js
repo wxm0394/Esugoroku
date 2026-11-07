@@ -98,7 +98,30 @@ export function preloadUkiyoeSheets(onUpdate) {
   const preloadPromises = sheetKeys.map(async (key) => {
     const assetId = SHEET_KEY_TO_ASSET_ID[key];
     if (assetId) {
-      await AssetManager.preloadAsset(assetId);
+      try {
+        await AssetManager.preloadAsset(assetId);
+        const cachedObj = AssetManager.getAsset(assetId);
+        let imgObj = null;
+        if (cachedObj && cachedObj.data instanceof Image) {
+          imgObj = cachedObj.data;
+        } else if (cachedObj && cachedObj.data) {
+          imgObj = cachedObj.data;
+        } else {
+          // If AssetManager has URL, construct Image element
+          const url = AssetManager.getUrl(assetId) || MASTER_SHEETS[key];
+          imgObj = new Image();
+          imgObj.src = url;
+          await new Promise((res) => {
+            imgObj.onload = res;
+            imgObj.onerror = res;
+          });
+        }
+        if (imgObj) {
+          loadedImages.set(key, imgObj);
+        }
+      } catch (err) {
+        console.warn(`Failed to load master sheet ${key}:`, err);
+      }
     }
   });
   Promise.all(preloadPromises).then(() => {

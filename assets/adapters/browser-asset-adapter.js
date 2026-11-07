@@ -16,7 +16,9 @@ export class BrowserAssetAdapter {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) {
         this._audioContext = new AudioCtx();
-        this._audioContext.resume().catch(() => {});
+        if (this._audioContext.state === 'suspended') {
+          this._audioContext.resume().catch(() => {});
+        }
       }
     }
     return this._audioContext;
@@ -31,18 +33,19 @@ export class BrowserAssetAdapter {
    */
   toLoadUrl(relativePath, asset, platform) {
     if (!relativePath) return '';
-    // 如果已经是 data: URI 或绝对 URL (http://, https://)
-    if (relativePath.startsWith('data:') || relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
+    // 如果已经是 data: URI, blob: URI 或 绝对 URL (http://, https://, //)
+    if (/^(data:|blob:|https?:\/\/|\/\/)/i.test(relativePath)) {
       return relativePath;
     }
 
     // 结合 baseUrl
-    let url = relativePath;
-    if (this.baseUrl && !url.startsWith('/')) {
-      url = `${this.baseUrl}/${url}`.replace(/\/+/g, '/');
+    if (this.baseUrl) {
+      const base = this.baseUrl.replace(/\/+$/, '');
+      const path = relativePath.replace(/^\/+/, '');
+      return `${base}/${path}`;
     }
 
-    return url;
+    return relativePath;
   }
 
   /**
