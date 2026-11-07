@@ -23,7 +23,6 @@ global.Image = global.Image || class {
 };
 
 import * as THREE from 'three';
-global.THREE = THREE;
 
 import { AssetRegistryImpl } from '../assets/manifest/asset-registry.js';
 import { AssetManager } from '../assets/asset-manager.js';
@@ -142,6 +141,23 @@ async function runUnitTests() {
   for (let m = 0; m < 6; m++) {
     assert.notStrictEqual(diceInst1.pickableMesh.material[m], diceInst2.pickableMesh.material[m], `Face material #${m} must be distinct object reference`);
   }
+
+  // Check all 21 pip objects across two dice instances (Phase 4)
+  assert.equal(diceInst1.group.children.length, 22, 'Group must have 22 children (1 cube + 21 pips)');
+  assert.equal(diceInst2.group.children.length, 22, 'Group must have 22 children (1 cube + 21 pips)');
+  for (let p = 1; p < 22; p++) {
+    const pip1 = diceInst1.group.children[p];
+    const pip2 = diceInst2.group.children[p];
+    assert.notStrictEqual(pip1, pip2, `Pip child #${p} mesh must be distinct object reference`);
+    assert.notStrictEqual(pip1.geometry, pip2.geometry, `Pip child #${p} SphereGeometry must not be shared across dice instances`);
+    assert.notStrictEqual(pip1.material, pip2.material, `Pip child #${p} Material must not be shared across dice instances`);
+  }
+
+  // Test shadow behavior (Phase 3)
+  assert.strictEqual(diceInst1.pickableMesh.castShadow, true, 'enableShadow: true should set castShadow to true');
+  assert.strictEqual(diceInst1.pickableMesh.receiveShadow, true, 'enableShadow: true should set receiveShadow to true');
+  assert.strictEqual(diceInst2.pickableMesh.castShadow, false, 'enableShadow: false should set castShadow to false');
+  assert.strictEqual(diceInst2.pickableMesh.receiveShadow, true, 'enableShadow: false should keep receiveShadow as true');
 
   // Test position / rotation mutation independence
   diceInst1.group.position.set(10, 20, 30);

@@ -2,16 +2,14 @@
 // Real Three.js bone dice factory extracted from Tabletop3D.setupDiceBowlAndDie()
 // 遵循 Esugoroku V2.1 Three.js 规范与 Edo 浮世绘风格
 
+import * as THREE from 'three';
+
 /**
  * Creates texture for a single die face (1..6) on a 256x256 canvas.
  * @param {number} faceValue - Face number (1..6)
  * @returns {THREE.CanvasTexture}
  */
 export function createDieFaceTexture(faceValue) {
-  if (typeof THREE === 'undefined') {
-    throw new Error('Three.js (THREE) is required to create die face textures.');
-  }
-
   const size = 256;
   const c = typeof document !== 'undefined'
     ? document.createElement('canvas')
@@ -92,10 +90,6 @@ const FACE_ORDER = [2, 5, 1, 6, 3, 4];
  * @returns {{ group: THREE.Group, pickableMesh: THREE.Mesh }}
  */
 export function createBoneDiceFactory(options = {}) {
-  if (typeof THREE === 'undefined') {
-    throw new Error('Three.js (THREE) is required to create bone dice.');
-  }
-
   const enableShadow = options.enableShadow !== false;
   const dieSize = 1.68;
 
@@ -115,7 +109,7 @@ export function createBoneDiceFactory(options = {}) {
   const dieGroup = new THREE.Group();
   const cubeMesh = new THREE.Mesh(new THREE.BoxGeometry(dieSize, dieSize, dieSize), materials);
   cubeMesh.castShadow = enableShadow;
-  cubeMesh.receiveShadow = enableShadow;
+  cubeMesh.receiveShadow = true;
   cubeMesh.userData.isDiceBowl = true;
   dieGroup.add(cubeMesh);
 
