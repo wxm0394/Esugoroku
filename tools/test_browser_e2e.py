@@ -157,6 +157,9 @@ def wait_for(driver, expression: str, timeout: float = 15.0, label: str = "condi
         except Exception as exc:  # module may still be loading
             last = exc
         time.sleep(0.05)
+    errs = browser_errors(driver)
+    if errs:
+        print("Browser console SEVERE errors:\n", "\n".join(errs))
     raise E2EFailure(f"timeout waiting for {label}" + (f": {last}" if last else ""))
 
 
@@ -446,7 +449,9 @@ def make_driver(chrome: str, chromedriver: str):
                 "--headless=new",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
-                "--disable-gpu",
+                "--use-gl=angle",
+                "--use-angle=swiftshader",
+                "--ignore-gpu-blocklist",
                 "--hide-scrollbars",
                 "--mute-audio",
                 "--window-size=1440,900",
@@ -459,9 +464,9 @@ def make_driver(chrome: str, chromedriver: str):
             driver = webdriver.Chrome(service=service, options=options)
             driver.set_page_load_timeout(25)
             return driver
-        except ImportError:
+        except Exception:
             pass
-    return PlaywrightDriver()
+    raise RuntimeError("ChromeDriver required for browser E2E tests")
 
 
 def resolve_chromium_Display() -> str:
@@ -1075,7 +1080,38 @@ def test_dice_and_stability(driver, suite: Suite) -> None:
     suite.check(all(d["settled"] for d in dice), "die begins settled")
     suite.check(all(1 <= d["value"] <= 6 for d in dice), "die has a legal pip value")
     suite.check(js(driver, "return window.__ESR__.state.physDice[0].active"), "the die is the active caster")
-    suite.check(True, "single 3D bone die with visible pips is rendered")
+
+    # Genuine Three.js scene & dieMesh structural runtime inspection
+    die_mesh_info = js(
+        driver,
+        """
+        const tt = window.__ESR__.tabletop;
+        if (!tt || !tt.dieMesh) return { ok: false };
+        const dieMesh = tt.dieMesh;
+        const isGroup = dieMesh.type === 'Group' || dieMesh.isGroup === true;
+        const inScene = Boolean(tt.scene && tt.scene.children.includes(dieMesh));
+        const childrenCount = dieMesh.children ? dieMesh.children.length : 0;
+        const cubeMesh = dieMesh.children[0];
+        const hasBoxGeo = Boolean(cubeMesh && cubeMesh.geometry && cubeMesh.geometry.type === 'BoxGeometry');
+        const pips = dieMesh.children.slice(1);
+        const allPipSphereGeo = pips.length === 21 && pips.every(p => p.geometry && p.geometry.type === 'SphereGeometry');
+        const normalRotValid = Boolean(dieMesh.rotation && typeof dieMesh.rotation.x === 'number' && !isNaN(dieMesh.rotation.x));
+        return {
+            ok: true,
+            isGroup,
+            inScene,
+            childrenCount,
+            hasBoxGeo,
+            allPipSphereGeo,
+            normalRotValid,
+        };
+        """,
+    )
+    suite.check(die_mesh_info.get("ok"), "3D tabletop engine loaded dieMesh")
+    suite.check(die_mesh_info.get("isGroup") and die_mesh_info.get("inScene"), "dieMesh is a THREE.Group attached to scene")
+    suite.eq(die_mesh_info.get("childrenCount"), 22, "dieMesh contains exactly 22 direct children (1 BoxGeometry + 21 SphereGeometry)")
+    suite.check(die_mesh_info.get("hasBoxGeo") and die_mesh_info.get("allPipSphereGeo"), "dieMesh structure is 1 BoxGeometry cube and 21 SphereGeometry pips")
+    suite.check(die_mesh_info.get("normalRotValid"), "dieMesh normal Euler rotation vector is valid")
 
     # Verify 12-charm loadout customization & 4 AI difficulty tiers
     charm_snap = js(driver, "return window.__ESR__.setCharms(['wind', 'purify', 'reroll'])")
@@ -1085,8 +1121,14 @@ def test_dice_and_stability(driver, suite: Suite) -> None:
     js(driver, "return window.__ESR__.setAiDifficulty('normal')")
 
     # Trigger a physics roll, verify board stability while dice tumble, and verify settled die orientation matches logic face
+    rot_start = js(driver, "return {x: window.__ESR__.tabletop.dieMesh.rotation.x, y: window.__ESR__.tabletop.dieMesh.rotation.y, z: window.__ESR__.tabletop.dieMesh.rotation.z}")
     js(driver, "window.__ESR__.roll(4)")
     time.sleep(0.18)
+    rot_tumble = js(driver, "return {x: window.__ESR__.tabletop.dieMesh.rotation.x, y: window.__ESR__.tabletop.dieMesh.rotation.y, z: window.__ESR__.tabletop.dieMesh.rotation.z}")
+    suite.check(
+        rot_start["x"] != rot_tumble["x"] or rot_start["y"] != rot_tumble["y"] or rot_start["z"] != rot_tumble["z"],
+        "dieMesh rotation tumbles dynamically during roll",
+    )
     try:
         a = stage_crop(driver, 190, 68, 800, 660)
         time.sleep(0.18)
@@ -1101,6 +1143,9 @@ def test_dice_and_stability(driver, suite: Suite) -> None:
     suite.eq(settled_snap["dice"][0]["value"], 4, "settled die logic value is 4")
     suite.eq(settled_snap["dice"][0]["eulerTopFace"], 4, "settled 3D die Euler top face matches logic roll 4")
     suite.eq(settled_snap["dice"][0]["eulerAlignmentDot"], 1.0, "settled 3D die top face normal is strictly +Y (1.0)")
+    visual_top = js(driver, "return window.__ESR__.tabletop ? window.__ESR__.tabletop.getDiceEffectStats() : null")
+    suite.check(visual_top and visual_top.get("topFaceMatchesLogic"), "settled 3D visual top face matches logic roll value")
+    suite.eq(visual_top and visual_top.get("visualTopFace"), 4, "settled 3D visual top face is 4")
 
 
 def test_flows(driver, suite: Suite, shot_dir: Path | None) -> None:

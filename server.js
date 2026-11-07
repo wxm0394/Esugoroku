@@ -93,6 +93,13 @@ function safePath(urlPath) {
       return target;
     }
   }
+  if (normalized.startsWith('/mobile/')) {
+    const sub = normalized.slice('/mobile/'.length);
+    const target = path.resolve(ROOT, sub);
+    if (target.startsWith(ROOT + path.sep) && fs.existsSync(target) && fs.statSync(target).isFile()) {
+      return target;
+    }
+  }
   const relative = normalized.replace(/^\/+/, '');
   const absolute = path.resolve(ROOT, relative || 'index.html');
   if (absolute !== ROOT && !absolute.startsWith(ROOT + path.sep)) return null;

@@ -2432,6 +2432,7 @@ function snapshot() {
 
 window.__ESR__ = {
   get state() { return G; },
+  get tabletop() { return tabletop; },
   core: EsugorokuCore,
   boards: BOARDS,
   cards: UKIYOE_CARDS,
